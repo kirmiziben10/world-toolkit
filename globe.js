@@ -23,6 +23,7 @@
   let settled = false;
   let showcasing = false;
   let pinLat = null, pinLng = null;   // lat/lng where the dot is pinned (null = center reticle)
+  let pinSurface = null;              // cached latLngToSurface result for pinned dot
   let showcaseTimer = null;
 
   // Resources
@@ -173,6 +174,7 @@
     const ll = getLatLng();
     pinLat = ll.lat;
     pinLng = ll.lng;
+    pinSurface = latLngToSurface(pinLat, pinLng, RADIUS + 1);
     scheduleGeocode();
 
     // Start 20s countdown to showcase mode
@@ -182,6 +184,7 @@
       settled = false;
       pinLat = null;
       pinLng = null;
+      pinSurface = null;
       if (labelEl) labelEl.hidden = true;
     }, SHOWCASE_DELAY);
   }
@@ -191,6 +194,7 @@
     showcasing = false;
     pinLat = null;
     pinLng = null;
+    pinSurface = null;
     velX = 0;
     velY = 0;
     clearTimeout(showcaseTimer);
@@ -325,8 +329,8 @@
       p.pop();
 
       // Pinned dot on sphere surface (settled state)
-      if (pinLat !== null && pinLng !== null) {
-        const pt = latLngToSurface(pinLat, pinLng, RADIUS + 1);
+      if (pinSurface !== null) {
+        const pt = pinSurface;
         p.push();
         p.translate(pt.x, pt.y, pt.z);
         p.noStroke();
