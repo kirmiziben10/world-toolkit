@@ -975,7 +975,7 @@ input[type="range"]::-moz-range-thumb {
 
 
 #progress-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 9000;
   display: flex;
@@ -1022,6 +1022,12 @@ input[type="range"]::-moz-range-thumb {
 }
 .win-opening {
   animation: win-open 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.win-maximizing {
+  transition: top 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              left 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              height 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
 }
 .win-closing {
   animation: win-close 0.15s ease-in both;
