@@ -9,6 +9,12 @@ const RECT_STYLE = {
   color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
 };
 
+// ===== Cached DOM refs (set in init) =====
+let analyzeBtnEl = null;
+let analyzeBtnTextEl = null;
+let undoBtnEl = null;
+let redoBtnEl = null;
+
 // ===== State =====
 const state = {
   map: null,
@@ -25,6 +31,7 @@ const state = {
   starredSpots: new Set(JSON.parse(localStorage.getItem('sv_starred') || '[]')),
   boundsHistory: [],
   historyIndex: -1,
+  editDebounce: null,
 };
 
 // ===== localStorage Persistence =====
@@ -79,6 +86,10 @@ function restoreWindowLayout(winId) {
 document.addEventListener('DOMContentLoaded', init);
 
 function init() {
+  analyzeBtnEl = document.getElementById('analyze-btn');
+  analyzeBtnTextEl = analyzeBtnEl.querySelector('.btn-text');
+  undoBtnEl = document.getElementById('undo-btn');
+  redoBtnEl = document.getElementById('redo-btn');
   restoreWindowLayout('main-window');
   initMap();
   initDrawControls();
@@ -196,13 +207,12 @@ function initDrawControls() {
 function setupRectEditing(layer) {
   if (layer.editing) layer.editing.enable();
 
-  let editDebounce = null;
   layer.on('edit', () => {
     state.selectionBounds = layer.getBounds();
     validateSelection(state.selectionBounds);
     // Debounce history push so continuous dragging = single undo step
-    clearTimeout(editDebounce);
-    editDebounce = setTimeout(() => {
+    clearTimeout(state.editDebounce);
+    state.editDebounce = setTimeout(() => {
       pushBoundsHistory(state.selectionBounds);
     }, 400);
   });
@@ -259,10 +269,8 @@ function applyBoundsFromHistory() {
 }
 
 function updateUndoRedoButtons() {
-  const undoBtn = document.getElementById('undo-btn');
-  const redoBtn = document.getElementById('redo-btn');
-  if (undoBtn) undoBtn.disabled = state.historyIndex <= 0;
-  if (redoBtn) redoBtn.disabled = state.historyIndex >= state.boundsHistory.length - 1;
+  if (undoBtnEl) undoBtnEl.disabled = state.historyIndex <= 0;
+  if (redoBtnEl) redoBtnEl.disabled = state.historyIndex >= state.boundsHistory.length - 1;
 }
 
 // ===== Slider Bindings =====
@@ -795,20 +803,18 @@ function countTilesForBounds(bounds) {
 
 // Validate selection size and update the Analyze button state
 function validateSelection(bounds) {
-  const analyzeBtn = document.getElementById('analyze-btn');
   if (!bounds) {
-    analyzeBtn.disabled = true;
-    analyzeBtn.querySelector('.btn-text').textContent = 'Analyze Area';
+    analyzeBtnEl.disabled = true;
+    analyzeBtnTextEl.textContent = 'Analyze Area';
     return;
   }
   const tiles = countTilesForBounds(bounds);
   if (tiles > MAX_TILES) {
-    analyzeBtn.disabled = true;
-    analyzeBtn.querySelector('.btn-text').textContent =
-      `Area too large (${tiles} tiles, max ${MAX_TILES})`;
+    analyzeBtnEl.disabled = true;
+    analyzeBtnTextEl.textContent = `Area too large (${tiles} tiles, max ${MAX_TILES})`;
   } else {
-    analyzeBtn.disabled = false;
-    analyzeBtn.querySelector('.btn-text').textContent = 'Analyze Area';
+    analyzeBtnEl.disabled = false;
+    analyzeBtnTextEl.textContent = 'Analyze Area';
   }
 }
 
