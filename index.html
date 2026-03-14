@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScenicView — Find Stunning Mountain Viewpoints</title>
+  <meta name="description"
+    content="Discover scenic viewpoints with mountain views for picnics and camping. Browser-based terrain analysis powered by open elevation data.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Desktop Background (Bliss wallpaper) -->
+  <div id="desktop-bg"></div>
+
+  <!-- Desktop Icons -->
+  <div id="desktop-icons">
+    <div class="desktop-icon" id="icon-search-spots" title="Search for Spots">
+      <img src="assets/map_icon.svg" alt="Search" class="desktop-icon-img">
+      <span class="desktop-icon-label">Search for Spots</span>
+    </div>
+    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots">
+      <img src="assets/heart_icon.svg" alt="Loved" class="desktop-icon-img">
+      <span class="desktop-icon-label">Loved Spots</span>
+    </div>
+    <div class="desktop-icon" id="icon-starred-spots" title="Starred Spots">
+      <img src="assets/star_icon.svg" alt="Starred" class="desktop-icon-img">
+      <span class="desktop-icon-label">Starred Spots</span>
+    </div>
+  </div>
+
+  <!-- Search Bar (Win7 style) -->
+  <div id="search-bar">
+    <input type="text" id="search-input" placeholder="Search " readonly>
+    <img src="assets/magnifier_icon.svg" alt="Search" class="search-magnifier">
+  </div>
+
+  <!-- Earth Globe Widget -->
+  <div id="earth-globe">
+    <img src="assets/earth_globe.png" alt="Earth" id="earth-img">
+  </div>
+
+  <!-- Main Window -->
+  <div id="main-window">
+    <!-- Titlebar -->
+    <div id="window-titlebar">
+      <div class="titlebar-leading">
+        <img src="assets/search_icon.svg" alt="" class="titlebar-icon">
+        <span class="titlebar-text">Search For Spots</span>
+      </div>
+      <div class="titlebar-trailing">
+        <button class="titlebar-btn" id="btn-help" title="Help">
+          <img src="assets/help_icon.svg" alt="Help" width="20" height="20">
+        </button>
+        <button class="titlebar-btn" id="btn-close" title="Close">
+          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        </button>
+      </div>
+    </div>
+
+    <!-- Window Borders -->
+    <div class="window-border window-border-left"></div>
+    <div class="window-border window-border-right"></div>
+    <div class="window-border window-border-bottom"></div>
+
+    <!-- Resize Handles -->
+    <div class="resize-handle resize-n"></div>
+    <div class="resize-handle resize-s"></div>
+    <div class="resize-handle resize-e"></div>
+    <div class="resize-handle resize-w"></div>
+    <div class="resize-handle resize-ne"></div>
+    <div class="resize-handle resize-nw"></div>
+    <div class="resize-handle resize-se"></div>
+    <div class="resize-handle resize-sw"></div>
+
+    <!-- Window Content -->
+    <div id="window-content">
+      <!-- Controls Panel (flush left side panel) -->
+      <aside id="controls-panel">
+        <div class="panel-content">
+          <div class="slider-group-label">Viewpoint Criteria</div>
+
+          <div class="controls-grid">
+            <div class="control-group">
+              <div class="label-row">
+                <span class="label-text">Minimum Elevation</span>
+                <span class="label-value" id="min-elevation-val">200m</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider-track-container">
+                  <input type="range" id="min-elevation" min="0" max="3000" value="200" step="50">
+                </div>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="label-row">
+                <span class="label-text">Max Slope</span>
+                <span class="label-value" id="max-slope-val">15°</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider-track-container">
+                  <input type="range" id="max-slope" min="1" max="45" value="15" step="1">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="slider-group-label">Scenery</div>
+
+          <div class="controls-grid">
+            <div class="control-group">
+              <div class="label-row">
+                <span class="label-text">Closeness</span>
+                <span class="label-value" id="search-radius-val">5 km</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider-track-container">
+                  <input type="range" id="search-radius" min="1" max="20" value="5" step="1">
+                </div>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="label-row">
+                <span class="label-text">Valley depth</span>
+                <span class="label-value" id="min-valley-depth-val">50m</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider-track-container">
+                  <input type="range" id="min-valley-depth" min="10" max="500" value="50" step="10">
+                </div>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="label-row">
+                <span class="label-text">Min Peak Prominence</span>
+                <span class="label-value" id="min-prominence-val">200m</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider-track-container">
+                  <input type="range" id="min-prominence" min="50" max="1000" value="200" step="25">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button id="analyze-btn" class="xp-primary-btn" disabled>
+            <span class="btn-text">Analyze Area</span>
+          </button>
+
+          <button id="clear-btn" class="xp-secondary-btn" hidden>
+            Clear Results
+          </button>
+        </div>
+      </aside>
+
+      <!-- Map fills the remaining space -->
+      <div id="map"></div>
+
+      <!-- Results Panel -->
+      <div id="results-panel" class="xp-panel" hidden>
+        <div class="xp-panel-header">
+          <h2>Viewpoints <span id="results-count" class="badge">0</span></h2>
+          <button id="close-results" class="xp-icon-btn" title="Close">✕</button>
+        </div>
+        <div id="results-list" class="results-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loved Spots Window -->
+  <div id="loved-window" class="xp-window" hidden>
+    <div id="loved-window-titlebar" class="window-titlebar">
+      <div class="titlebar-leading">
+        <img src="assets/heart_icon.svg" alt="" class="titlebar-icon">
+        <span class="titlebar-text">Loved Spots</span>
+      </div>
+      <div class="titlebar-trailing">
+        <button class="titlebar-btn" id="btn-close-loved" title="Close">
+          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        </button>
+      </div>
+    </div>
+    <div class="window-border window-border-left"></div>
+    <div class="window-border window-border-right"></div>
+    <div class="window-border window-border-bottom"></div>
+    <div class="resize-handle resize-n"></div>
+    <div class="resize-handle resize-s"></div>
+    <div class="resize-handle resize-e"></div>
+    <div class="resize-handle resize-w"></div>
+    <div class="resize-handle resize-ne"></div>
+    <div class="resize-handle resize-nw"></div>
+    <div class="resize-handle resize-se"></div>
+    <div class="resize-handle resize-sw"></div>
+    <div class="xp-window-content">
+      <div class="xp-panel-header">
+        <h2>Loved Spots <span id="loved-count" class="badge">0</span></h2>
+      </div>
+      <div id="loved-list" class="results-list"></div>
+    </div>
+  </div>
+
+  <!-- Starred Spots Window -->
+  <div id="starred-window" class="xp-window" hidden>
+    <div id="starred-window-titlebar" class="window-titlebar">
+      <div class="titlebar-leading">
+        <img src="assets/star_icon.svg" alt="" class="titlebar-icon">
+        <span class="titlebar-text">Starred Spots</span>
+      </div>
+      <div class="titlebar-trailing">
+        <button class="titlebar-btn" id="btn-close-starred" title="Close">
+          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        </button>
+      </div>
+    </div>
+    <div class="window-border window-border-left"></div>
+    <div class="window-border window-border-right"></div>
+    <div class="window-border window-border-bottom"></div>
+    <div class="resize-handle resize-n"></div>
+    <div class="resize-handle resize-s"></div>
+    <div class="resize-handle resize-e"></div>
+    <div class="resize-handle resize-w"></div>
+    <div class="resize-handle resize-ne"></div>
+    <div class="resize-handle resize-nw"></div>
+    <div class="resize-handle resize-se"></div>
+    <div class="resize-handle resize-sw"></div>
+    <div class="xp-window-content">
+      <div class="xp-panel-header">
+        <h2>Starred Spots <span id="starred-count" class="badge">0</span></h2>
+      </div>
+      <div id="starred-list" class="results-list"></div>
+    </div>
+  </div>
+
+  <!-- Progress Overlay -->
+  <div id="progress-overlay" hidden>
+    <div class="progress-card xp-dialog">
+      <div class="progress-spinner"></div>
+      <h3 id="progress-title">Analyzing Terrain</h3>
+      <p id="progress-text">Preparing...</p>
+      <div class="progress-track">
+        <div id="progress-bar" class="progress-fill"></div>
+      </div>
+      <p id="progress-detail" class="progress-detail"></p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
