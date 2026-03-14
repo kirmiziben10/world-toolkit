@@ -244,6 +244,12 @@
     </div>
   </div>
 
+  <!-- Help Tooltip -->
+  <div id="help-tooltip" class="help-tooltip" hidden>
+    <p class="help-tooltip-title"></p>
+    <ol class="help-tooltip-list" id="help-tooltip-list"></ol>
+  </div>
+
   <!-- Progress Overlay -->
   <div id="progress-overlay" hidden>
     <div class="progress-card xp-dialog">
@@ -257,6 +263,23 @@
     </div>
   </div>
 
+  <script>
+    (function () {
+      ['main-window', 'loved-window', 'starred-window'].forEach(function (id) {
+        var raw = localStorage.getItem('sv_layout_' + id);
+        if (!raw) return;
+        try {
+          var l = JSON.parse(raw);
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.style.top    = l.top    + 'px';
+          el.style.left   = l.left   + 'px';
+          el.style.width  = l.width  + 'px';
+          el.style.height = l.height + 'px';
+        } catch (e) {}
+      });
+    })();
+  </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>

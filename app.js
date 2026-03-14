@@ -40,10 +40,41 @@ function bearingToCompass(deg) {
   return COMPASS_LABELS[idx];
 }
 
+// ===== Window Layout Persistence =====
+function saveWindowLayout(winId) {
+  const win = document.getElementById(winId);
+  const rect = win.getBoundingClientRect();
+  localStorage.setItem('sv_layout_' + winId, JSON.stringify({
+    top: rect.top, left: rect.left, width: rect.width, height: rect.height,
+  }));
+}
+
+function loadWindowLayout(winId) {
+  const raw = localStorage.getItem('sv_layout_' + winId);
+  if (!raw) return null;
+  try {
+    const l = JSON.parse(raw);
+    l.left = Math.max(0, Math.min(l.left, window.innerWidth - 100));
+    l.top  = Math.max(0, Math.min(l.top,  window.innerHeight - 60));
+    return l;
+  } catch { return null; }
+}
+
+function restoreWindowLayout(winId) {
+  const l = loadWindowLayout(winId);
+  if (!l) return;
+  const win = document.getElementById(winId);
+  win.style.top    = l.top    + 'px';
+  win.style.left   = l.left   + 'px';
+  win.style.width  = l.width  + 'px';
+  win.style.height = l.height + 'px';
+}
+
 // ===== Initialize =====
 document.addEventListener('DOMContentLoaded', init);
 
 function init() {
+  restoreWindowLayout('main-window');
   initMap();
   initDrawControls();
   initSliders();
@@ -84,9 +115,30 @@ function initMap() {
     }
   );
 
-  osm.addTo(state.map);
+  const worldTopo = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution: '&copy; <a href="https://www.esri.com">Esri</a>',
+      maxZoom: 19,
+    }
+  );
 
-  L.control.layers({ 'Standard': osm, 'Topographic': topo }, null, { position: 'topright' }).addTo(state.map);
+  const satellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution: '&copy; <a href="https://www.esri.com">Esri</a>',
+      maxZoom: 19,
+    }
+  );
+
+  topo.addTo(state.map);
+
+  L.control.layers({
+    'Standard': osm,
+    'Topographic': topo,
+    'World Topo (Esri)': worldTopo,
+    'Satellite': satellite,
+  }, null, { position: 'topright' }).addTo(state.map);
   L.control.zoom({ position: 'topright' }).addTo(state.map);
 }
 
@@ -174,12 +226,15 @@ function initButtons() {
     closeWindow(win, icon);
   });
 
-  document.getElementById('btn-help').addEventListener('click', () => {
-    alert('ScenicView — Terrain Analysis Tool\n\n'
-      + '1. Use the rectangle tool to select an area on the map\n'
-      + '2. Adjust analysis sliders as needed\n'
-      + '3. Click "Analyze Area" to find scenic viewpoints\n\n'
-      + 'Results show viewpoints scored by elevation, slope, and nearby peaks.');
+  document.getElementById('btn-help').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleHelpTooltip(e.currentTarget, [
+      'Draw a selection: click the rectangle icon in the map toolbar (top-right) and drag to mark an area.',
+      'Set criteria: use the sliders to control minimum elevation, max slope, peak closeness, valley depth, and peak prominence.',
+      'Click "Analyze Area" — terrain data is fetched and analyzed entirely in your browser.',
+      'Explore results: directional markers show viewpoints on the map. Click a marker or result card for details.',
+      'Save favourites: use ❤️ Love or ⭐ Star buttons to bookmark spots across sessions.',
+    ]);
   });
 
   // Desktop icon: open/focus Search window
@@ -234,11 +289,19 @@ function openSavedPanel(type) {
   const icon = document.getElementById(iconId);
   // Only animate open if truly hidden; otherwise just focus
   if (win.hidden) {
-    const offset = type === 'loved' ? 0 : 344;
-    win.style.top = '120px';
-    win.style.left = `calc(50% - 160px + ${offset}px)`;
-    win.style.width = '320px';
-    win.style.height = '460px';
+    const saved = loadWindowLayout(winId);
+    if (saved) {
+      win.style.top    = saved.top    + 'px';
+      win.style.left   = saved.left   + 'px';
+      win.style.width  = saved.width  + 'px';
+      win.style.height = saved.height + 'px';
+    } else {
+      const offset = type === 'loved' ? 0 : 344;
+      win.style.top = '120px';
+      win.style.left = `calc(50% - 160px + ${offset}px)`;
+      win.style.width = '320px';
+      win.style.height = '460px';
+    }
     win.hidden = false;
     win.style.zIndex = getTopZ();
     openWindow(win, icon);
@@ -299,6 +362,37 @@ function iconPop(iconEl) {
     iconEl.classList.remove('icon-popping');
   }, { once: true });
 }
+
+// ===== Help Tooltip =====
+function toggleHelpTooltip(btnEl, items) {
+  const tooltip = document.getElementById('help-tooltip');
+  if (!tooltip.hidden) { tooltip.hidden = true; return; }
+
+  document.getElementById('help-tooltip-list').innerHTML = items.map(t => `<li>${t}</li>`).join('');
+  tooltip.querySelector('.help-tooltip-title').textContent = 'How to use this window';
+
+  // Reveal off-screen first to measure
+  tooltip.style.visibility = 'hidden';
+  tooltip.hidden = false;
+  const ttRect = tooltip.getBoundingClientRect();
+  const btnRect = btnEl.getBoundingClientRect();
+
+  let top  = btnRect.bottom + 6;
+  let left = btnRect.right - ttRect.width;
+  left = Math.max(8, Math.min(left, window.innerWidth  - ttRect.width  - 8));
+  top  = Math.max(8, Math.min(top,  window.innerHeight - ttRect.height - 8));
+
+  tooltip.style.top  = top  + 'px';
+  tooltip.style.left = left + 'px';
+  tooltip.style.visibility = '';
+}
+
+document.addEventListener('click', (e) => {
+  const tooltip = document.getElementById('help-tooltip');
+  if (tooltip && !tooltip.hidden && !tooltip.contains(e.target) && !e.target.closest('#btn-help')) {
+    tooltip.hidden = true;
+  }
+});
 
 function renderSavedPanel(type) {
   const isLoved = type === 'loved';
@@ -377,8 +471,11 @@ function initWindowDrag() {
   });
 
   document.addEventListener('mouseup', () => {
-    isDragging = false;
-    document.body.style.userSelect = '';
+    if (isDragging) {
+      isDragging = false;
+      document.body.style.userSelect = '';
+      saveWindowLayout('main-window');
+    }
   });
 }
 
@@ -455,9 +552,12 @@ function initWindowResize() {
   });
 
   document.addEventListener('mouseup', () => {
-    isResizing = false;
-    currentHandle = null;
-    document.body.style.userSelect = '';
+    if (isResizing) {
+      isResizing = false;
+      currentHandle = null;
+      document.body.style.userSelect = '';
+      saveWindowLayout('main-window');
+    }
   });
 }
 
@@ -489,7 +589,7 @@ function initXpWindow(winId, titlebarId) {
   });
 
   document.addEventListener('mouseup', () => {
-    if (isDragging) { isDragging = false; document.body.style.userSelect = ''; }
+    if (isDragging) { isDragging = false; document.body.style.userSelect = ''; saveWindowLayout(winId); }
   });
 
   // --- Resize ---
@@ -529,7 +629,7 @@ function initXpWindow(winId, titlebarId) {
   });
 
   document.addEventListener('mouseup', () => {
-    if (isResizing) { isResizing = false; currentHandle = null; document.body.style.userSelect = ''; }
+    if (isResizing) { isResizing = false; currentHandle = null; document.body.style.userSelect = ''; saveWindowLayout(winId); }
   });
 }
 
