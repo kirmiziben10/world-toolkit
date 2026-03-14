@@ -4,7 +4,10 @@ const DEFAULT_ZOOM = 6;
 const ANALYSIS_ZOOM = 11;
 const TILE_SIZE = 256;
 const TERRAIN_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const MAX_TILES = 30;
+const MAX_TILES = 80;
+const RECT_STYLE = {
+  color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
+};
 
 // ===== State =====
 const state = {
@@ -20,6 +23,8 @@ const state = {
   results: [],
   likedSpots: new Set(JSON.parse(localStorage.getItem('sv_liked') || '[]')),
   starredSpots: new Set(JSON.parse(localStorage.getItem('sv_starred') || '[]')),
+  boundsHistory: [],
+  historyIndex: -1,
 };
 
 // ===== localStorage Persistence =====
@@ -83,6 +88,11 @@ function init() {
   initWindowResize();
   initXpWindow('loved-window', 'loved-window-titlebar');
   initXpWindow('starred-window', 'starred-window-titlebar');
+  // Globe widget → map navigation
+  document.addEventListener('globe-navigate', (e) => {
+    if (state.map) state.map.flyTo([e.detail.lat, e.detail.lng], 6, { duration: 1.5 });
+  });
+
   // Invalidate map size after layout settles (flush side panel)
   requestAnimationFrame(() => {
     if (state.map) state.map.invalidateSize();
@@ -155,17 +165,11 @@ function initDrawControls() {
       circle: false,
       marker: false,
       circlemarker: false,
-      rectangle: {
-        shapeOptions: {
-          color: '#09ACE2',
-          weight: 2,
-          fillOpacity: 0.1,
-          dashArray: '8, 6',
-        },
-      },
+      rectangle: { shapeOptions: RECT_STYLE },
     },
     edit: {
       featureGroup: state.drawnItems,
+      edit: false,       // no edit toolbar — rectangle is always editable
       remove: true,
     },
   });
@@ -176,13 +180,89 @@ function initDrawControls() {
     state.drawnItems.clearLayers();
     state.drawnItems.addLayer(e.layer);
     state.selectionBounds = e.layer.getBounds();
-    document.getElementById('analyze-btn').disabled = false;
+    validateSelection(state.selectionBounds);
+    pushBoundsHistory(state.selectionBounds);
+    setupRectEditing(e.layer);
   });
 
   state.map.on(L.Draw.Event.DELETED, () => {
     state.selectionBounds = null;
-    document.getElementById('analyze-btn').disabled = true;
+    validateSelection(null);
+    pushBoundsHistory(null);
   });
+}
+
+// Make a rectangle layer directly editable (handles always visible, no save step)
+function setupRectEditing(layer) {
+  if (layer.editing) layer.editing.enable();
+
+  let editDebounce = null;
+  layer.on('edit', () => {
+    state.selectionBounds = layer.getBounds();
+    validateSelection(state.selectionBounds);
+    // Debounce history push so continuous dragging = single undo step
+    clearTimeout(editDebounce);
+    editDebounce = setTimeout(() => {
+      pushBoundsHistory(state.selectionBounds);
+    }, 400);
+  });
+}
+
+// ===== Undo / Redo =====
+function pushBoundsHistory(bounds) {
+  // Trim any redo states ahead of current position
+  state.boundsHistory = state.boundsHistory.slice(0, state.historyIndex + 1);
+  state.boundsHistory.push(bounds ? boundsToObj(bounds) : null);
+  state.historyIndex = state.boundsHistory.length - 1;
+  updateUndoRedoButtons();
+}
+
+function boundsToObj(b) {
+  return { south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast() };
+}
+
+function objToBounds(o) {
+  return L.latLngBounds(L.latLng(o.south, o.west), L.latLng(o.north, o.east));
+}
+
+function undo() {
+  if (state.historyIndex <= 0) return;
+  state.historyIndex--;
+  applyBoundsFromHistory();
+}
+
+function redo() {
+  if (state.historyIndex >= state.boundsHistory.length - 1) return;
+  state.historyIndex++;
+  applyBoundsFromHistory();
+}
+
+function applyBoundsFromHistory() {
+  const saved = state.boundsHistory[state.historyIndex];
+  state.drawnItems.clearLayers();
+
+  if (!saved) {
+    state.selectionBounds = null;
+    validateSelection(null);
+    updateUndoRedoButtons();
+    return;
+  }
+
+  const bounds = objToBounds(saved);
+  const rect = L.rectangle(bounds, RECT_STYLE);
+  state.drawnItems.addLayer(rect);
+  setupRectEditing(rect);
+
+  state.selectionBounds = bounds;
+  validateSelection(bounds);
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  const undoBtn = document.getElementById('undo-btn');
+  const redoBtn = document.getElementById('redo-btn');
+  if (undoBtn) undoBtn.disabled = state.historyIndex <= 0;
+  if (redoBtn) redoBtn.disabled = state.historyIndex >= state.boundsHistory.length - 1;
 }
 
 // ===== Slider Bindings =====
@@ -216,6 +296,17 @@ function initButtons() {
 
   document.getElementById('close-results').addEventListener('click', () => {
     document.getElementById('results-panel').hidden = true;
+  });
+
+  // Undo / Redo buttons
+  document.getElementById('undo-btn').addEventListener('click', undo);
+  document.getElementById('redo-btn').addEventListener('click', redo);
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (e.ctrlKey && e.key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+    else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
   });
 
 
@@ -693,6 +784,34 @@ function latToTileY(lat, zoom) {
   );
 }
 
+// Compute how many tiles a bounds selection requires (with 1-tile padding)
+function countTilesForBounds(bounds) {
+  const xMin = lngToTileX(bounds.getWest(), ANALYSIS_ZOOM) - 1;
+  const xMax = lngToTileX(bounds.getEast(), ANALYSIS_ZOOM) + 1;
+  const yMin = latToTileY(bounds.getNorth(), ANALYSIS_ZOOM) - 1;
+  const yMax = latToTileY(bounds.getSouth(), ANALYSIS_ZOOM) + 1;
+  return (xMax - xMin + 1) * (yMax - yMin + 1);
+}
+
+// Validate selection size and update the Analyze button state
+function validateSelection(bounds) {
+  const analyzeBtn = document.getElementById('analyze-btn');
+  if (!bounds) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.querySelector('.btn-text').textContent = 'Analyze Area';
+    return;
+  }
+  const tiles = countTilesForBounds(bounds);
+  if (tiles > MAX_TILES) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.querySelector('.btn-text').textContent =
+      `Area too large (${tiles} tiles, max ${MAX_TILES})`;
+  } else {
+    analyzeBtn.disabled = false;
+    analyzeBtn.querySelector('.btn-text').textContent = 'Analyze Area';
+  }
+}
+
 function tileToLng(x, zoom) {
   return (x / Math.pow(2, zoom)) * 360 - 180;
 }
@@ -741,14 +860,14 @@ async function fetchElevationGrid(bounds, zoom) {
   state.tileBoundaries.forEach((layer) => state.map.removeLayer(layer));
   state.tileBoundaries = [];
 
-  // Fetch all tiles and draw boundaries
+  // Fetch all tiles — only draw boundaries for tiles inside user selection
+  const selBounds = L.latLngBounds([south, west], [north, east]);
   const promises = [];
   for (let ty = yMin; ty <= yMax; ty++) {
     for (let tx = xMin; tx <= xMax; tx++) {
       const offsetX = (tx - xMin) * TILE_SIZE;
       const offsetY = (ty - yMin) * TILE_SIZE;
 
-      // Draw tile boundary on map
       const tileNorth = tileToLat(ty, zoom);
       const tileSouth = tileToLat(ty + 1, zoom);
       const tileWest = tileToLng(tx, zoom);
@@ -759,32 +878,34 @@ async function fetchElevationGrid(bounds, zoom) {
         [tileNorth, tileEast]
       );
 
-      const rect = L.rectangle(tileBounds, {
-        color: '#09ACE2',
-        weight: 1,
-        fillOpacity: 0,
-        dashArray: '4, 4',
-        interactive: false,
-      }).addTo(state.map);
+      // Only show tile boundaries that overlap the user's actual selection
+      let rect = null;
+      if (tileBounds.intersects(selBounds)) {
+        rect = L.rectangle(tileBounds, {
+          color: '#09ACE2',
+          weight: 1,
+          fillOpacity: 0,
+          dashArray: '4, 4',
+          interactive: false,
+        }).addTo(state.map);
 
-      // Label with tile coords
-      const label = L.tooltip({
-        permanent: true,
-        direction: 'center',
-        className: 'tile-label',
-      })
-        .setContent(`${tx},${ty}`)
-        .setLatLng(tileBounds.getCenter());
-      rect.bindTooltip(label);
+        const label = L.tooltip({
+          permanent: true,
+          direction: 'center',
+          className: 'tile-label',
+        })
+          .setContent(`${tx},${ty}`)
+          .setLatLng(tileBounds.getCenter());
+        rect.bindTooltip(label);
 
-      state.tileBoundaries.push(rect);
+        state.tileBoundaries.push(rect);
+      }
 
       const promise = fetchTileImage(zoom, tx, ty)
         .then((img) => {
           ctx.drawImage(img, offsetX, offsetY);
           loaded++;
-          // Mark tile as loaded (solid border)
-          rect.setStyle({ dashArray: null, color: '#09ACE2', weight: 1.5 });
+          if (rect) rect.setStyle({ dashArray: null, color: '#09ACE2', weight: 1.5 });
           updateProgress(
             'Fetching elevation tiles...',
             (loaded / totalTiles) * 50,
@@ -792,9 +913,8 @@ async function fetchElevationGrid(bounds, zoom) {
           );
         })
         .catch(() => {
-          // Tile missing (ocean, etc.) — mark as failed
-          rect.setStyle({ color: '#ef4444', fillOpacity: 0.05 });
           loaded++;
+          if (rect) rect.setStyle({ color: '#ef4444', fillOpacity: 0.05 });
           updateProgress(
             'Fetching elevation tiles...',
             (loaded / totalTiles) * 50,
@@ -862,9 +982,13 @@ async function startAnalysis() {
       minProminence: parseInt(document.getElementById('min-prominence').value),
     };
 
-    const results = await runWorkerAnalysis(grid, params);
+    const rawResults = await runWorkerAnalysis(grid, params);
 
-    // Step 3: Display results
+    // Step 3: Clip results to user's selection bounds
+    const results = rawResults.filter(vp =>
+      state.selectionBounds.contains(L.latLng(vp.lat, vp.lng))
+    );
+
     hideProgress();
     displayResults(results);
     document.getElementById('clear-btn').hidden = false;
@@ -1044,6 +1168,7 @@ function displayResults(viewpoints) {
         <button class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="Star this spot">
           ${state.starredSpots.has(vpId) ? '⭐' : '☆'}
         </button>
+        <a class="action-btn ge-btn" href="https://earth.google.com/web/search/${vp.lat},${vp.lng}" target="_blank" rel="noopener" title="Open in Google Earth">🌍</a>
       </div>
     `;
     // Navigate on card body click (not buttons)
@@ -1119,6 +1244,7 @@ function createPopupContent(vp, index, vpId) {
       <button class="action-btn star-btn popup-star ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
         ${state.starredSpots.has(vpId) ? '⭐' : '☆'} Star
       </button>
+      <a class="action-btn ge-btn" href="https://earth.google.com/web/search/${vp.lat},${vp.lng}" target="_blank" rel="noopener">🌍 Earth</a>
     </div>
   `;
 }

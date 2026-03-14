@@ -156,7 +156,7 @@ html, body {
   opacity: 0.9;
 }
 
-/* ===== Earth Globe Widget ===== */
+/* ===== Earth Globe Widget (3D) ===== */
 #earth-globe {
   position: fixed;
   top: 139px;
@@ -166,13 +166,51 @@ html, body {
   height: 150px;
   border-radius: 9999px;
   overflow: hidden;
-  box-shadow: inset 0px 0px 10px 0px rgba(255, 255, 255, 1), 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-#earth-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* Atmosphere glow overlay */
+#earth-globe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 20px 6px rgba(80, 160, 255, 0.25),
+              inset -8px -8px 20px 2px rgba(0, 0, 0, 0.3),
+              inset 8px 8px 16px 0px rgba(180, 220, 255, 0.25),
+              inset 0 0 4px 1px rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Location label below the globe */
+#globe-label {
+  position: fixed;
+  top: 295px;
+  right: 50px;
+  z-index: 200;
+  width: 150px;
+  text-align: center;
+  font-family: var(--font-main);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-white);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  padding: 4px 8px;
+  background: rgba(9, 172, 226, 0.3);
+  border: 1px solid rgba(151, 214, 244, 0.2);
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+#globe-label[hidden] { display: none; }
+#globe-label:hover {
+  background: rgba(9, 172, 226, 0.5);
 }
 
 /* ===== Main Window ===== */
@@ -478,6 +516,27 @@ html, body {
   background-repeat: no-repeat !important;
 }
 
+/* ===== Rectangle Edit Handles ===== */
+.leaflet-editing-icon {
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: -6px !important;
+  margin-top: -6px !important;
+  border-radius: 50% !important;
+  background: var(--accent-blue) !important;
+  border: 2px solid #fff !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35) !important;
+  cursor: grab !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.leaflet-editing-icon:hover {
+  transform: scale(1.3);
+  box-shadow: 0 2px 8px rgba(9, 172, 226, 0.5) !important;
+}
+.leaflet-editing-icon:active {
+  cursor: grabbing !important;
+}
+
 /* ===== XP Panel (Controls & Results) ===== */
 .xp-panel {
   background: var(--panel-bg);
@@ -738,6 +797,38 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
+/* Undo / Redo row */
+.undo-redo-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.undo-redo-btn {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid #E1CC94;
+  border-radius: 4px;
+  background: #F8F5EB;
+  color: #5a5a3a;
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.undo-redo-btn:hover:not(:disabled) {
+  background: #F4EEDC;
+  border-color: #D6BD7D;
+}
+.undo-redo-btn:active:not(:disabled) {
+  background: #EBE0C0;
+}
+.undo-redo-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* Buttons — Figma SVG style */
 .xp-primary-btn {
   width: 100%;
@@ -891,6 +982,14 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(9, 172, 226, 0.1);
   border-color: var(--accent-cyan);
 }
+a.action-btn {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .action-btn.active {
   background: rgba(9, 172, 226, 0.12);
   border-color: var(--accent-blue);
@@ -1361,6 +1460,7 @@ input[type="range"]::-moz-range-thumb {
   #desktop-icons { display: none; }
   #search-bar { display: none; }
   #earth-globe { display: none; }
+  #globe-label { display: none; }
 
   #window-content {
     flex-direction: column;
