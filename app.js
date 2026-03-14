@@ -270,6 +270,11 @@ function initButtons() {
     closeWindow(document.getElementById('starred-window'), document.getElementById('icon-starred-spots'));
   });
 
+  // Maximize buttons
+  initMaximize('main-window',    'btn-maximize-main');
+  initMaximize('loved-window',   'btn-maximize-loved');
+  initMaximize('starred-window', 'btn-maximize-starred');
+
   // Bring any window to front on click
   ['main-window', 'loved-window', 'starred-window'].forEach(id => {
     document.getElementById(id).addEventListener('mousedown', () => {
@@ -432,6 +437,49 @@ function renderSavedPanel(type) {
       state.map.setView([vp.lat, vp.lng], 14);
     });
     listEl.appendChild(card);
+  });
+}
+
+// ===== Maximize / Restore =====
+const MAXIMIZE_SVG = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/></svg>`;
+const RESTORE_SVG  = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="3" width="11" height="11" rx="1.5" stroke="white" stroke-width="1.5"/><rect x="3" y="6" width="11" height="11" rx="1.5" stroke="white" stroke-width="1.5" fill="rgba(255,255,255,0.15)"/></svg>`;
+
+function initMaximize(winId, btnId) {
+  const win = document.getElementById(winId);
+  const btn = document.getElementById(btnId);
+  let savedLayout = null;
+
+  btn.addEventListener('click', () => {
+    if (savedLayout) {
+      win.style.top    = savedLayout.top    + 'px';
+      win.style.left   = savedLayout.left   + 'px';
+      win.style.width  = savedLayout.width  + 'px';
+      win.style.height = savedLayout.height + 'px';
+      savedLayout = null;
+      btn.innerHTML = MAXIMIZE_SVG;
+      btn.title = 'Maximize';
+    } else {
+      const rect = win.getBoundingClientRect();
+      savedLayout = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+      win.style.top    = '0px';
+      win.style.left   = '0px';
+      win.style.width  = window.innerWidth  + 'px';
+      win.style.height = window.innerHeight + 'px';
+      btn.innerHTML = RESTORE_SVG;
+      btn.title = 'Restore';
+    }
+    win.classList.add('win-maximizing');
+    let rafId;
+    function tickResize() {
+      if (state.map) state.map.invalidateSize({ animate: false });
+      rafId = requestAnimationFrame(tickResize);
+    }
+    rafId = requestAnimationFrame(tickResize);
+    win.addEventListener('transitionend', () => {
+      cancelAnimationFrame(rafId);
+      win.classList.remove('win-maximizing');
+      if (state.map) state.map.invalidateSize();
+    }, { once: true });
   });
 }
 
