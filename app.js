@@ -9,6 +9,10 @@ const RECT_STYLE = {
   color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
 };
 
+// ===== Mobile Detection =====
+const IS_MOBILE = window.matchMedia('(max-width: 600px)').matches ||
+  ('ontouchstart' in window && window.innerWidth <= 600);
+
 // ===== Cached DOM refs (set in init) =====
 let analyzeBtnEl = null;
 let analyzeBtnTextEl = null;
@@ -54,6 +58,7 @@ function bearingToCompass(deg) {
 
 // ===== Window Layout Persistence =====
 function saveWindowLayout(winId) {
+  if (IS_MOBILE) return;
   const win = document.getElementById(winId);
   const rect = win.getBoundingClientRect();
   localStorage.setItem('sv_layout_' + winId, JSON.stringify({
@@ -90,15 +95,19 @@ function init() {
   analyzeBtnTextEl = analyzeBtnEl.querySelector('.btn-text');
   undoBtnEl = document.getElementById('undo-btn');
   redoBtnEl = document.getElementById('redo-btn');
-  restoreWindowLayout('main-window');
+  if (!IS_MOBILE) {
+    restoreWindowLayout('main-window');
+  }
   initMap();
   initDrawControls();
   initSliders();
   initButtons();
-  initWindowDrag();
-  initWindowResize();
-  initXpWindow('loved-window', 'loved-window-titlebar');
-  initXpWindow('starred-window', 'starred-window-titlebar');
+  if (!IS_MOBILE) {
+    initWindowDrag();
+    initWindowResize();
+    initXpWindow('loved-window', 'loved-window-titlebar');
+    initXpWindow('starred-window', 'starred-window-titlebar');
+  }
   // Globe widget → map navigation
   document.addEventListener('globe-navigate', (e) => {
     if (state.map) state.map.flyTo([e.detail.lat, e.detail.lng], 6, { duration: 1.5 });
@@ -152,15 +161,41 @@ function initMap() {
     }
   );
 
-  topo.addTo(state.map);
-
-  L.control.layers({
+  const baseLayers = {
     'Standard': osm,
     'Topographic': topo,
     'World Topo (Esri)': worldTopo,
     'Satellite': satellite,
-  }, null, { position: 'topright' }).addTo(state.map);
+  };
+
+  // Restore saved base layer or default to topo
+  const savedLayer = localStorage.getItem('sv_base_layer');
+  (baseLayers[savedLayer] || topo).addTo(state.map);
+
+  L.control.layers(baseLayers, null, { position: 'topright' }).addTo(state.map);
   L.control.zoom({ position: 'topright' }).addTo(state.map);
+
+  // Persist base layer choice
+  state.map.on('baselayerchange', (e) => {
+    localStorage.setItem('sv_base_layer', e.name);
+  });
+
+  // Restore saved map position
+  const savedView = localStorage.getItem('sv_map_view');
+  if (savedView) {
+    try {
+      const v = JSON.parse(savedView);
+      state.map.setView([v.lat, v.lng], v.zoom);
+    } catch {}
+  }
+
+  // Persist map position on move/zoom
+  state.map.on('moveend', () => {
+    const c = state.map.getCenter();
+    localStorage.setItem('sv_map_view', JSON.stringify({
+      lat: c.lat, lng: c.lng, zoom: state.map.getZoom(),
+    }));
+  });
 }
 
 // ===== Draw Controls =====
@@ -306,6 +341,30 @@ function initButtons() {
     document.getElementById('results-panel').hidden = true;
   });
 
+  // Controls panel toggle — restore saved state (suppress transition on load)
+  const controlsPanel = document.getElementById('controls-panel');
+  const controlsToggle = document.getElementById('controls-toggle');
+  if (IS_MOBILE || localStorage.getItem('sv_filters_collapsed') === '1') {
+    controlsPanel.style.transition = 'none';
+    controlsToggle.style.transition = 'none';
+    controlsPanel.classList.add('collapsed');
+    controlsToggle.classList.add('collapsed');
+    requestAnimationFrame(() => {
+      controlsPanel.style.transition = '';
+      controlsToggle.style.transition = '';
+      if (state.map) state.map.invalidateSize();
+    });
+  }
+  controlsToggle.addEventListener('click', () => {
+    controlsPanel.classList.toggle('collapsed');
+    controlsToggle.classList.toggle('collapsed');
+    localStorage.setItem('sv_filters_collapsed', controlsPanel.classList.contains('collapsed') ? '1' : '0');
+    // Let the map reclaim/yield the space
+    requestAnimationFrame(() => {
+      setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 310);
+    });
+  });
+
   // Undo / Redo buttons
   document.getElementById('undo-btn').addEventListener('click', undo);
   document.getElementById('redo-btn').addEventListener('click', redo);
@@ -369,10 +428,12 @@ function initButtons() {
     closeWindow(document.getElementById('starred-window'), document.getElementById('icon-starred-spots'));
   });
 
-  // Maximize buttons
-  initMaximize('main-window',    'btn-maximize-main');
-  initMaximize('loved-window',   'btn-maximize-loved');
-  initMaximize('starred-window', 'btn-maximize-starred');
+  // Maximize buttons (desktop only)
+  if (!IS_MOBILE) {
+    initMaximize('main-window',    'btn-maximize-main');
+    initMaximize('loved-window',   'btn-maximize-loved');
+    initMaximize('starred-window', 'btn-maximize-starred');
+  }
 
   // Bring any window to front on click
   ['main-window', 'loved-window', 'starred-window'].forEach(id => {
@@ -393,18 +454,20 @@ function openSavedPanel(type) {
   const icon = document.getElementById(iconId);
   // Only animate open if truly hidden; otherwise just focus
   if (win.hidden) {
-    const saved = loadWindowLayout(winId);
-    if (saved) {
-      win.style.top    = saved.top    + 'px';
-      win.style.left   = saved.left   + 'px';
-      win.style.width  = saved.width  + 'px';
-      win.style.height = saved.height + 'px';
-    } else {
-      const offset = type === 'loved' ? 0 : 344;
-      win.style.top = '120px';
-      win.style.left = `calc(50% - 160px + ${offset}px)`;
-      win.style.width = '320px';
-      win.style.height = '460px';
+    if (!IS_MOBILE) {
+      const saved = loadWindowLayout(winId);
+      if (saved) {
+        win.style.top    = saved.top    + 'px';
+        win.style.left   = saved.left   + 'px';
+        win.style.width  = saved.width  + 'px';
+        win.style.height = saved.height + 'px';
+      } else {
+        const offset = type === 'loved' ? 0 : 344;
+        win.style.top = '120px';
+        win.style.left = `calc(50% - 160px + ${offset}px)`;
+        win.style.width = '320px';
+        win.style.height = '460px';
+      }
     }
     win.hidden = false;
     win.style.zIndex = getTopZ();
@@ -424,6 +487,16 @@ const ICON_MAP = {
 };
 
 function openWindow(winEl, iconEl) {
+  if (IS_MOBILE) {
+    winEl.classList.remove('win-closing');
+    winEl.classList.add('win-opening');
+    winEl.addEventListener('animationend', () => {
+      winEl.classList.remove('win-opening');
+    }, { once: true });
+    // Invalidate map after opening
+    requestAnimationFrame(() => { if (state.map) state.map.invalidateSize(); });
+    return;
+  }
   // Element is already unhidden — measure, set transform-origin, animate
   winEl.style.visibility = 'hidden';         // prevent 1-frame flash
   requestAnimationFrame(() => {
@@ -444,6 +517,15 @@ function openWindow(winEl, iconEl) {
 
 function closeWindow(winEl, iconEl) {
   if (winEl.hidden) return;
+  if (IS_MOBILE) {
+    winEl.classList.remove('win-opening');
+    winEl.classList.add('win-closing');
+    winEl.addEventListener('animationend', () => {
+      winEl.classList.remove('win-closing');
+      winEl.hidden = true;
+    }, { once: true });
+    return;
+  }
   const wr = winEl.getBoundingClientRect();
   const ir = iconEl.getBoundingClientRect();
   const ox = (ir.left + ir.width  / 2) - wr.left;
