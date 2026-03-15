@@ -55,7 +55,7 @@ User draws rectangle on Leaflet map
 - Viewpoint candidates are subsampled every 3rd pixel for performance
 - Results are spatially clustered (400m min distance) and capped at 150
 - **Visual clustering**: Leaflet.markercluster groups nearby markers at lower zoom levels; clicking a cluster zooms in or spiderfies to reveal individual viewpoints
-- **State persistence**: Liked/starred spots stored in localStorage (`sv_liked`, `sv_starred`) as JSON-serialized Sets, keyed by `${lat.toFixed(5)},${lng.toFixed(5)}`
+- **State persistence**: Liked/starred spots stored in localStorage (`sv_liked`, `sv_starred`) as JSON-serialized Sets, keyed by `${lat.toFixed(5)},${lng.toFixed(5)}`. Map position/zoom (`sv_map_view`) and base layer choice (`sv_base_layer`) also persisted
 - **Key limits**: MAX_TILES=80 per selection (app.js), SUBSAMPLE=3 pixels (worker), CLUSTER_DISTANCE_M=400m, MAX_RESULTS=150
 - **Marker private state**: Result markers store data as `marker._vpScore`, `marker._viewLine`, `marker._peakDot` etc. — view-lines are created on popup open and cleaned up on popup close
 - **Tile boundary display**: Only tiles that intersect the user's selection are drawn on the map; padding tiles fetched for analysis are not shown
@@ -85,3 +85,21 @@ User draws rectangle on Leaflet map
 - **Label**: `#globe-label` div inserted after `#earth-globe`. Clicking it fires `globe-navigate` → `map.flyTo`. Hidden during drag/showcase
 - **Edge shine**: CSS `#earth-globe::after` with inset box-shadows (blue atmosphere + dark shadow + bright top-left highlight)
 - **DOM refs**: `analyzeBtnEl`, `analyzeBtnTextEl`, `undoBtnEl`, `redoBtnEl` cached in `init()` — not queried on every event
+
+### Controls Panel Toggle
+
+- Chevron toggle button (`#controls-toggle`) is a sibling of `#controls-panel` inside `#window-content`, not a child
+- Collapsed state uses `margin-left` transition (0.3s cubic-bezier) to slide the panel off-screen; toggle slides with it via `left` transition
+- Collapsed/expanded state persisted in `localStorage` (`sv_filters_collapsed`). On mobile, starts collapsed by default
+- After toggling, `map.invalidateSize()` is called (with 310ms delay matching transition) so Leaflet reclaims/yields the space
+
+### Mobile Layout
+
+- **Detection**: `IS_MOBILE` constant set at load time via `matchMedia('(max-width: 600px)')` combined with `ontouchstart` check
+- **Home screen**: On mobile, `main-window` starts hidden (set in inline `<script>` before app.js loads). Globe and desktop icons are centered for a portrait layout
+- **Fullscreen windows**: All `.xp-window` elements are forced to `100vw × 100vh` via CSS; resize handles, window borders, and maximize buttons are hidden
+- **Window drag/resize/maximize disabled**: `initWindowDrag()`, `initWindowResize()`, `initMaximize()`, and layout persistence are skipped when `IS_MOBILE`
+- **Window open/close animations**: Mobile uses simple CSS class-based animations (`win-opening`/`win-closing`) instead of the desktop transform-origin zoom effect
+- **Controls panel**: Becomes an absolute-positioned 80vw overlay (max 320px) sliding from the left edge with a box-shadow
+- **Results panel**: Bottom-sheet style, `max-height: 45%`
+- **Responsive breakpoints**: `max-width: 900px` breakpoint now excludes mobile (`min-width: 601px`); dedicated `max-width: 600px` breakpoint handles mobile

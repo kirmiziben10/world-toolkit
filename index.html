@@ -89,6 +89,11 @@
     <!-- Window Content -->
     <div id="window-content">
       <!-- Controls Panel (flush left side panel) -->
+      <div id="controls-toggle" class="controls-toggle" title="Toggle filters">
+        <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
       <aside id="controls-panel">
         <div class="panel-content">
           <div class="slider-group-label">Viewpoint Criteria</div>
@@ -283,6 +288,11 @@
 
   <script>
     (function () {
+      if (window.innerWidth <= 600) {
+        // On mobile, start with main window hidden (home screen visible)
+        document.getElementById('main-window').hidden = true;
+        return;
+      }
       ['main-window', 'loved-window', 'starred-window'].forEach(function (id) {
         var raw = localStorage.getItem('sv_layout_' + id);
         if (!raw) return;
