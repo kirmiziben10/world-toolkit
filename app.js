@@ -1397,7 +1397,7 @@ function createDirectionalMarkerSvg(score, color, bearing) {
       <!-- Score circle -->
       <circle cx="24" cy="24" r="13" fill="${color}" />
       <circle cx="24" cy="24" r="13" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1" />
-      <text x="24" y="28" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="Inter,system-ui,sans-serif">${Math.round(score)}</text>
+      <text x="24" y="28" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="Ubuntu,system-ui,sans-serif">${Math.round(score)}</text>
     </svg>
   `;
 }
