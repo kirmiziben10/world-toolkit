@@ -513,7 +513,7 @@ html, body {
 .leaflet-draw-toolbar .leaflet-draw-edit-remove {
   background-image: url("assets/Bin closed.svg") !important;
   background-size: 24px 24px !important;
-  background-position: calc(50% - 3px) center !important;
+  background-position: calc(50% - 4px) center !important;
   background-repeat: no-repeat !important;
 }
 
@@ -1679,13 +1679,23 @@ a.action-btn {
   }
   .leaflet-bar a {
     width: 36px !important;
-    height: 38px !important;
-    line-height: 38px !important;
+    height: 36px !important;
+    line-height: 36px !important;
   }
   .leaflet-control-zoom {
     width: 36px !important;
   }
   .leaflet-draw-toolbar {
     width: 36px !important;
+  }
+  .leaflet-draw-toolbar .leaflet-draw-draw-rectangle {
+    height: 36px !important;
+    line-height: 36px !important;
+  }
+  .leaflet-draw-toolbar a {
+    background-size: 20px 20px !important;
+  }
+  .leaflet-draw-toolbar .leaflet-draw-edit-remove {
+    background-position: calc(50% - 4px) center !important;
   }
 }
