@@ -277,7 +277,7 @@ html, body {
 .titlebar-trailing {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
 }
 
 .titlebar-btn {
@@ -553,8 +553,8 @@ html, body {
 #controls-panel {
   position: relative;
   z-index: 2;
-  width: 300px;
-  min-width: 300px;
+  width: 277px;
+  min-width: 277px;
   flex-shrink: 0;
   background: rgba(238, 228, 199, 0.8); /* #EEE4C7 with 80% opacity */
   backdrop-filter: blur(5px);
@@ -567,14 +567,14 @@ html, body {
 }
 
 #controls-panel.collapsed {
-  margin-left: -290px;
+  margin-left: -267px;
 }
 
 /* Toggle tab button — sibling of #controls-panel inside #window-content */
 .controls-toggle {
   position: absolute;
   top: 0;
-  left: 300px;
+  left: 277px;
   z-index: 3;
   background: rgba(238, 228, 199, 0.8);
   border: none;
@@ -650,7 +650,7 @@ html, body {
 }
 
 .panel-content {
-  padding: 12px 14px;
+  padding: 15px 20px;
   overflow-y: auto;
   flex: 1;
 }
@@ -665,9 +665,9 @@ html, body {
 
 .slider-group-label {
   position: relative;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
-  color: #5a6a7e;
+  color: rgba(0, 0, 0, 0.6);
   letter-spacing: 0.3px;
   /* Adds extra bottom space for the line */
   padding: 4px 0 10px 0;
@@ -693,49 +693,43 @@ html, body {
 .control-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-/* label row: text + value badge */
-.label-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 10px;
 }
 
 .label-text {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-dark);
+  font-size: 16px;
+  font-weight: 400;
+  color: #000;
   letter-spacing: 0;
 }
 
 .label-value {
   font-size: 12px;
-  font-weight: 600;
-  color: #5a5a3a;
+  font-weight: 400;
+  color: #333;
   font-variant-numeric: tabular-nums;
-  background: rgba(255, 248, 220, 0.9);
-  border: 1px solid rgba(210, 200, 160, 0.6);
-  border-radius: 4px;
-  padding: 3px 8px;
+  background: rgba(238, 228, 199, 0.8);
+  border: 0.5px solid #E1CC94;
+  border-radius: 3px;
+  padding: 2px 3px;
+  box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-/* Slider row: just track container */
+/* Slider row: track + value inline */
 .slider-row {
   display: flex;
   align-items: center;
+  gap: 5px;
 }
 
 /* ===== Ruler-style Slider Track ===== */
 .slider-track-container {
   position: relative;
-  width: 261px;
+  width: 195px;
   flex: none;
   height: 30px;
-  margin: 0 auto;
 }
 
 /*
