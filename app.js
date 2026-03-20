@@ -430,7 +430,6 @@ function initButtons() {
 
   // Maximize buttons (desktop only)
   if (!IS_MOBILE) {
-    initMaximize('main-window',    'btn-maximize-main');
     initMaximize('loved-window',   'btn-maximize-loved');
     initMaximize('starred-window', 'btn-maximize-starred');
   }

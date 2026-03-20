@@ -29,13 +29,13 @@
       <img src="assets/map_icon.svg" alt="Search" class="desktop-icon-img">
       <span class="desktop-icon-label">Search for Spots</span>
     </div>
-    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots">
-      <img src="assets/heart_icon.svg" alt="Loved" class="desktop-icon-img">
-      <span class="desktop-icon-label">Loved Spots</span>
-    </div>
     <div class="desktop-icon" id="icon-starred-spots" title="Starred Spots">
       <img src="assets/star_icon.svg" alt="Starred" class="desktop-icon-img">
       <span class="desktop-icon-label">Starred Spots</span>
+    </div>
+    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots">
+      <img src="assets/heart_icon.svg" alt="Loved" class="desktop-icon-img">
+      <span class="desktop-icon-label">Loved Spots</span>
     </div>
   </div>
 
@@ -59,11 +59,6 @@
       <div class="titlebar-trailing">
         <button class="titlebar-btn" id="btn-help" title="Help">
           <img src="assets/help_icon.svg" alt="Help" width="20" height="20">
-        </button>
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-main" title="Maximize">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
-          </svg>
         </button>
         <button class="titlebar-btn" id="btn-close" title="Close">
           <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
@@ -100,26 +95,22 @@
 
           <div class="controls-grid">
             <div class="control-group">
-              <div class="label-row">
-                <span class="label-text">Minimum Elevation</span>
-                <span class="label-value" id="min-elevation-val">200m</span>
-              </div>
+              <span class="label-text">Minimum Elevation</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-elevation" min="0" max="3000" value="200" step="50">
                 </div>
+                <span class="label-value" id="min-elevation-val">200m</span>
               </div>
             </div>
 
             <div class="control-group">
-              <div class="label-row">
-                <span class="label-text">Max Slope</span>
-                <span class="label-value" id="max-slope-val">15°</span>
-              </div>
+              <span class="label-text">Max Slope</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="max-slope" min="1" max="45" value="15" step="1">
                 </div>
+                <span class="label-value" id="max-slope-val">15°</span>
               </div>
             </div>
           </div>
@@ -128,38 +119,32 @@
 
           <div class="controls-grid">
             <div class="control-group">
-              <div class="label-row">
-                <span class="label-text">Closeness</span>
-                <span class="label-value" id="search-radius-val">5 km</span>
-              </div>
+              <span class="label-text">Closeness</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="search-radius" min="1" max="20" value="5" step="1">
                 </div>
+                <span class="label-value" id="search-radius-val">5 km</span>
               </div>
             </div>
 
             <div class="control-group">
-              <div class="label-row">
-                <span class="label-text">Valley depth</span>
-                <span class="label-value" id="min-valley-depth-val">50m</span>
-              </div>
+              <span class="label-text">Valley depth</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-valley-depth" min="10" max="500" value="50" step="10">
                 </div>
+                <span class="label-value" id="min-valley-depth-val">50m</span>
               </div>
             </div>
 
             <div class="control-group">
-              <div class="label-row">
-                <span class="label-text">Min Peak Prominence</span>
-                <span class="label-value" id="min-prominence-val">200m</span>
-              </div>
+              <span class="label-text">Min Peak Prominence</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-prominence" min="50" max="1000" value="200" step="25">
                 </div>
+                <span class="label-value" id="min-prominence-val">200m</span>
               </div>
             </div>
           </div>
