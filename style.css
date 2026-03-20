@@ -1633,7 +1633,7 @@ a.action-btn {
 
   /* Toggle chevron: repositioned for mobile panel */
   .controls-toggle {
-    left: min(80vw, 277px);
+    left: min(80vw, 320px);
     height: 48px;
     width: 32px;
     z-index: 6;
