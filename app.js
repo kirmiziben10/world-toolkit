@@ -1054,6 +1054,7 @@ async function startAnalysis() {
   const analyzeBtn = document.getElementById('analyze-btn');
   analyzeBtn.disabled = true;
   showProgress('Starting analysis...');
+  document.dispatchEvent(new CustomEvent('wt:analysis-start'));
 
   try {
     // Step 1: Fetch elevation data
@@ -1079,6 +1080,7 @@ async function startAnalysis() {
 
     hideProgress();
     displayResults(results);
+    document.dispatchEvent(new CustomEvent('wt:results', { detail: { count: results.length } }));
     document.getElementById('clear-btn').hidden = false;
   } catch (err) {
     hideProgress();
@@ -1357,6 +1359,7 @@ function toggleLike(vpId, btn) {
   saveLiked();
   // sync card button if popup button was toggled
   syncActionBtn('like-btn', vpId);
+  document.dispatchEvent(new CustomEvent('wt:like', { detail: { added: state.likedSpots.has(vpId) } }));
 }
 
 function toggleStar(vpId, btn) {
@@ -1371,6 +1374,7 @@ function toggleStar(vpId, btn) {
   }
   saveStarred();
   syncActionBtn('star-btn', vpId);
+  document.dispatchEvent(new CustomEvent('wt:star', { detail: { added: state.starredSpots.has(vpId) } }));
 }
 
 function syncActionBtn(cls, vpId) {

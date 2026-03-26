@@ -1693,3 +1693,16 @@ a.action-btn {
     background-position: calc(50% - 4px) center !important;
   }
 }
+
+/* ===== Desktop Buddy (Rocky) Overrides ===== */
+
+/* Override buddy input prompt to match Aero theme */
+input[placeholder="Say something to Rocky..."] {
+  background: rgba(240, 245, 250, 0.95) !important;
+  color: #1a1a2e !important;
+  border: 2px solid var(--accent-blue) !important;
+  font-family: var(--font-main) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15),
+    inset 0 1px 2px rgba(255, 255, 255, 0.5) !important;
+}
