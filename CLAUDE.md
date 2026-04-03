@@ -93,6 +93,38 @@ User draws rectangle on Leaflet map
 - Collapsed/expanded state persisted in `localStorage` (`sv_filters_collapsed`). On mobile, starts collapsed by default
 - After toggling, `map.invalidateSize()` is called (with 310ms delay matching transition) so Leaflet reclaims/yields the space
 
+### Desktop Buddy Integration ("Rocky")
+
+An animated 3D character (Three.js) embedded as a desktop pet. Source project lives at `../desktop-buddy/` with its own CLAUDE.md — read that before modifying the buddy's core code (physics, rendering, animation, scripting).
+
+**Integration files (in this repo):**
+- **`buddy-integration.js`** — Glue code. Initializes the buddy, wires world-toolkit CustomEvents to buddy reactions, manages cooldown, idle tips, and desktop icon toggle. This is the only file to edit for changing how Rocky interacts with world-toolkit.
+- **`vendor/desktop-buddy/desktop-buddy.iife.js`** — Pre-built IIFE bundle. Do NOT edit directly — rebuild from `../desktop-buddy/` with `pnpm build`, then copy `dist/desktop-buddy.iife.js` here.
+- **`Models/`** — OBJ model files at project root (fetched as `Models/Head.obj` etc. relative to page origin). Copied from `../desktop-buddy/dist/Models/`.
+- **`scripts/rocky-terrain.md`** — Dialogue script (markdown format with HTML comment directives). Edit this to change what Rocky says. Format documented in `../desktop-buddy/CLAUDE.md` under "Scripting system".
+
+**Event bridge (app.js → buddy-integration.js):**
+- `wt:analysis-start` — dispatched when terrain analysis begins
+- `wt:results` — dispatched after `displayResults()`, detail: `{ count }`
+- `wt:like` — dispatched after `toggleLike()`, detail: `{ added: boolean }`
+- `wt:star` — dispatched after `toggleStar()`, detail: `{ added: boolean }`
+
+These are `CustomEvent`s on `document`. To add new buddy reactions: dispatch a new `wt:` event in `app.js`, listen for it in `buddy-integration.js`.
+
+**Key constraints:**
+- Buddy is **disabled on mobile** (`IS_MOBILE` check in `buddy-integration.js`)
+- Buddy canvas z-index is 999999, speech bubble is 1000000 — above all world-toolkit UI
+- 8-second cooldown between reactions to avoid spamming dialogue
+- Visibility toggled via double-click on the Rocky desktop icon; persisted in `localStorage` (`sv_buddy_visible`)
+- The IIFE bundle hardcodes model paths as `Models/*.obj` relative to page origin — do not move the `Models/` directory without updating the bundle
+
+**Rebuilding the buddy bundle:**
+```bash
+cd ../desktop-buddy && pnpm build
+cp dist/desktop-buddy.iife.js ../world-toolkit/vendor/desktop-buddy/
+cp -r dist/Models/ ../world-toolkit/Models/
+```
+
 ### Mobile Layout
 
 - **Detection**: `IS_MOBILE` constant set at load time via `matchMedia('(max-width: 600px)')` combined with `ontouchstart` check
