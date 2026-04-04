@@ -6,10 +6,8 @@
 (function () {
   'use strict';
 
-  // Skip on mobile — buddy would obstruct the small screen
   var IS_MOBILE = window.matchMedia('(max-width: 600px)').matches ||
     ('ontouchstart' in window && window.innerWidth <= 600);
-  if (IS_MOBILE) return;
 
   function setup() {
     if (!window.DesktopBuddy) {
@@ -39,12 +37,13 @@
 
     // --- Init ---
     function initBuddy() {
+      var buddyMode = IS_MOBILE ? 'miniature' : 'full';
       buddy = window.DesktopBuddy.init({
         scriptUrl: 'scripts/rocky-terrain.md',
-        startSequence: 'welcome',
-        mode: 'miniature',
-        x: window.innerWidth - 120,
-        y: window.innerHeight - 100,
+        startSequence: window.Tutorial && window.Tutorial.shouldRun() ? undefined : 'welcome',
+        mode: buddyMode,
+        x: IS_MOBILE ? window.innerWidth - 60 : window.innerWidth - 120,
+        y: IS_MOBILE ? window.innerHeight - 50 : undefined,
       });
       document.addEventListener('pointerdown', resetActivity);
       document.addEventListener('keydown', resetActivity);
@@ -487,6 +486,40 @@
       // Apply saved colors after a short delay (models may still be loading)
       setTimeout(applySavedColors, 500);
       setTimeout(applySavedColors, 2000); // retry after models load
+      // Tutorial: start on first visit, add menu items
+      if (window.Tutorial) {
+        if (buddy.extraMenuItems) {
+          if (window.Tutorial.shouldRun()) {
+            buddy.extraMenuItems.push({
+              label: 'Skip Tutorial',
+              icon: '\u23ED',
+              action: function () {
+                window.Tutorial.skip();
+                // Replace skip with replay
+                buddy.extraMenuItems.length = 0;
+                buddy.extraMenuItems.push({
+                  label: 'Tutorial',
+                  icon: '\uD83D\uDCD6',
+                  action: function () {
+                    window.Tutorial.replay(buddy);
+                  },
+                });
+              },
+            });
+          } else {
+            buddy.extraMenuItems.push({
+              label: 'Tutorial',
+              icon: '\uD83D\uDCD6',
+              action: function () {
+                window.Tutorial.replay(buddy);
+              },
+            });
+          }
+        }
+        if (window.Tutorial.shouldRun()) {
+          setTimeout(function () { window.Tutorial.start(buddy); }, 1500);
+        }
+      }
     };
 
     if (visible) {
