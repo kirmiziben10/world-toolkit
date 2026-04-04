@@ -355,6 +355,21 @@
 
   // ---- Bootstrap ----
   function initGlobe() {
+    window.GlobeAPI = {
+      spin: function(vx, vy) {
+        velX += vx;
+        velY += vy;
+        settled = false;
+        showcasing = false;
+        pinLat = null;
+        pinLng = null;
+        pinSurface = null;
+        clearTimeout(showcaseTimer);
+        clearTimeout(geocodeTimer);
+        if (labelEl) labelEl.hidden = true;
+      }
+    };
+
     const img = document.getElementById('earth-img');
     if (img) img.remove();
 

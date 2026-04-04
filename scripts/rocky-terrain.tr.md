@@ -94,6 +94,11 @@
 
 <!-- group: Emotelar (Emotes) -->
 
+## Spin Globe
+<!-- keywords: çevir, küre, küreyi çevir, vur -->
+> {shake}Bunu izle!{/shake}
+<!-- trigger: spin-globe -->
+
 ## Fly
 <!-- keywords: uç, uçan, süzül, zıpla, dağıt -->
 > {color:purple}Viuuu!{/color} Bir {shake}dağ zirvesinde{/shake} olmak gibi!

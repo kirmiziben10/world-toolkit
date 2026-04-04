@@ -94,6 +94,11 @@
 
 <!-- group: Emotes -->
 
+## Spin Globe
+<!-- keywords: spin, globe, spin the globe, hit -->
+> {shake}Watch this!{/shake}
+<!-- trigger: spin-globe -->
+
 ## Fly
 <!-- keywords: fly, flying, float, jump, scatter -->
 > {color:purple}Wheee!{/color} Like being on a {shake}mountaintop{/shake}!

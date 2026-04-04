@@ -90,8 +90,12 @@
       idleTimerId = setInterval(function () {
         if (!buddy) return;
         if (Date.now() - lastActivityTime > IDLE_TIMEOUT) {
-          var tip = idleTips[Math.floor(Math.random() * idleTips.length)];
-          reactWithCooldown(tip);
+          if (Math.random() < 0.25) {
+            orchestrateGlobeSpin();
+          } else {
+            var tip = idleTips[Math.floor(Math.random() * idleTips.length)];
+            reactWithCooldown(tip);
+          }
           lastActivityTime = Date.now(); // reset so next tip waits another 60s
         }
       }, 15000); // check every 15s
@@ -102,6 +106,69 @@
         clearInterval(idleTimerId);
         idleTimerId = null;
       }
+    }
+
+    // --- Globe Spin Orchestration ---
+    function orchestrateGlobeSpin() {
+      if (!buddy) return;
+      var globe = document.getElementById('earth-globe');
+      if (!globe) return;
+      
+      var rect = globe.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height / 2;
+      var radius = rect.width / 2;
+      
+      var bounds = buddy.controller.getScreenBounds();
+      var bx = bounds.x + bounds.width / 2;
+      var by = bounds.y + bounds.height / 2;
+      
+      // Ray-march 80px away from the globe's edge
+      var dx = cx - bx;
+      var dy = buddy.controller.mode === 'full' ? 0 : cy - by;
+      var distToCenter = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distToCenter === 0) { dx = 1; distToCenter = 1; }
+      
+      var nx = dx / distToCenter;
+      var ny = dy / distToCenter;
+      
+      var targetX = cx - nx * (radius + 80);
+      var targetY = cy - ny * (radius + 80);
+      
+      // Send Rocky directly to the exact calculated 80px standoff point
+      buddy.controller.walkTo(targetX, targetY);
+      
+      var checkInterval = setInterval(function() {
+        if (!buddy || buddy.controller.drag.isDragging) {
+          clearInterval(checkInterval);
+          return;
+        }
+        
+        // Buddy internally nulls walkTarget when he arrives at targetX/Y 
+        if (buddy.controller.walkTarget == null) {
+          clearInterval(checkInterval);
+          
+          buddy.controller.orbitGlobe(cx, cy, 'right');
+          
+          var spinTime = 0;
+          var spinInterval = setInterval(function() {
+            if (window.GlobeAPI) {
+              // vy is horizontal spin (longitude), vx is vertical (latitude)
+              window.GlobeAPI.spin(0, -0.04); 
+            }
+            spinTime += 50;
+            if (spinTime >= 3000) {
+              clearInterval(spinInterval);
+              if (window.GlobeAPI) {
+                 // Impart a final random vertical and horizontal impulse so it lands somewhere fresh
+                 window.GlobeAPI.spin((Math.random() - 0.5) * 0.3, -0.15);
+              }
+              if (buddy) buddy.controller.stopPointing();
+            }
+          }, 50);
+        }
+      }, 100);
     }
 
     // --- World Toolkit event wiring ---
@@ -152,7 +219,9 @@
     });
 
     document.addEventListener('buddy:trigger', function(e) {
-      if (e.detail === 'lang-en') {
+      if (e.detail === 'spin-globe') {
+        orchestrateGlobeSpin();
+      } else if (e.detail === 'lang-en') {
         localStorage.setItem('sv_buddy_lang', 'en');
         setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
       } else if (e.detail === 'lang-tr') {
