@@ -1525,6 +1525,46 @@ a.action-btn {
   }
 }
 
+/* ===== Tutorial Overlay ===== */
+.tutorial-highlight {
+  position: fixed;
+  z-index: 500000;
+  pointer-events: none;
+  border: 2px solid var(--accent-cyan);
+  box-shadow:
+    0 0 0 4px rgba(151, 214, 244, 0.3),
+    0 0 20px rgba(9, 172, 226, 0.4);
+  animation: tutorial-pulse 1.5s ease-in-out infinite;
+  transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease;
+}
+
+@keyframes tutorial-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(151, 214, 244, 0.3), 0 0 20px rgba(9, 172, 226, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(151, 214, 244, 0.15), 0 0 30px rgba(9, 172, 226, 0.6); }
+}
+
+.tutorial-skip-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 500001;
+  padding: 6px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: var(--panel-bg);
+  backdrop-filter: var(--backdrop-blur);
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tutorial-skip-btn:hover {
+  color: var(--text-dark);
+  border-color: var(--accent-blue);
+}
+
 /* ===== Mobile Layout ===== */
 @media (max-width: 600px) {
   /* ---- Home Screen ---- */
