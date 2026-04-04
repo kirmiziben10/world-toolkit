@@ -357,7 +357,14 @@
     buddyRef = buddy;
     active = true;
 
-    fetch(SCRIPT_URL)
+    var lang = localStorage.getItem('sv_buddy_lang');
+    if (!lang && navigator.language) {
+      lang = navigator.language.split('-')[0];
+    }
+    var activeLang = lang === 'tr' ? 'tr' : 'en';
+    var scriptUrl = 'scripts/rocky-tutorial.' + activeLang + '.md';
+
+    fetch(scriptUrl)
       .then(function (res) {
         if (!res.ok) throw new Error('Failed to load tutorial script');
         return res.text();

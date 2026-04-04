@@ -1234,6 +1234,13 @@ function displayResults(viewpoints) {
 
     // Result card
     const compassDir = bearingToCompass(bearing);
+    const searchLat = vp.lat.toString().replace(/\./g, '%2e');
+    const searchLng = vp.lng.toString().replace(/\./g, '%2e');
+    // Add 50m to altitude to simulate a drone-height view and prevent the camera from spawning underground on steep slopes.
+    // Decrease pullback distance from 400d to 100d so it stays closer to the view point.
+    const geUrl = `https://earth.google.com/web/search/${searchLat},${searchLng}/@${vp.lat},${vp.lng},${vp.elevation + 50}a,100d,35y,${Math.round(vp.viewBearing || 0)}h,85t,0r`;
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${vp.lat},${vp.lng}`;
+
     const card = document.createElement('div');
     card.className = 'result-card';
     card.dataset.vpid = vpId;
@@ -1259,7 +1266,8 @@ function displayResults(viewpoints) {
         <button class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="Star this spot">
           ${state.starredSpots.has(vpId) ? '⭐' : '☆'}
         </button>
-        <a class="action-btn ge-btn" href="https://earth.google.com/web/search/${vp.lat},${vp.lng}" target="_blank" rel="noopener" title="Open in Google Earth">🌍</a>
+        <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener" title="Get Directions to Spot">🗺️</a>
+        <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener" title="Scenic 3D View (No Pin)">🌍</a>
       </div>
     `;
     // Navigate on card body click (not buttons)
@@ -1296,6 +1304,11 @@ function createPopupContent(vp, index, vpId) {
   const scoreColor = getScoreColor(vp.score);
   const compass = bearingToCompass(vp.viewBearing || 0);
   const bearingDeg = Math.round(vp.viewBearing || 0);
+  const searchLat = vp.lat.toString().replace(/\./g, '%2e');
+  const searchLng = vp.lng.toString().replace(/\./g, '%2e');
+  const geUrl = `https://earth.google.com/web/search/${searchLat},${searchLng}/@${vp.lat},${vp.lng},${vp.elevation + 50}a,100d,35y,${bearingDeg}h,85t,0r`;
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${vp.lat},${vp.lng}`;
+
   return `
     <div class="popup-title" style="color:${scoreColor}">Viewpoint #${index + 1} — Score: ${Math.round(vp.score)}</div>
     <div class="popup-bearing">
@@ -1335,7 +1348,8 @@ function createPopupContent(vp, index, vpId) {
       <button class="action-btn star-btn popup-star ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
         ${state.starredSpots.has(vpId) ? '⭐' : '☆'} Star
       </button>
-      <a class="action-btn ge-btn" href="https://earth.google.com/web/search/${vp.lat},${vp.lng}" target="_blank" rel="noopener">🌍 Earth</a>
+      <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener">🗺️ Maps</a>
+      <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener">🌍 3D Scene</a>
     </div>
   `;
 }

@@ -35,11 +35,20 @@
       '{bold}Peak prominence{/bold} measures how much a mountain stands out — higher is more {rainbow}dramatic{/rainbow}!',
     ];
 
+    function getCurrentLang() {
+      var lang = localStorage.getItem('sv_buddy_lang');
+      if (!lang && navigator.language) {
+        lang = navigator.language.split('-')[0];
+      }
+      return lang === 'tr' ? 'tr' : 'en';
+    }
+
     // --- Init ---
     function initBuddy() {
+      var lang = getCurrentLang();
       var buddyMode = IS_MOBILE ? 'miniature' : 'full';
       buddy = window.DesktopBuddy.init({
-        scriptUrl: 'scripts/rocky-terrain.md',
+        scriptUrl: 'scripts/rocky-terrain.' + lang + '.md',
         startSequence: window.Tutorial && window.Tutorial.shouldRun() ? undefined : 'welcome',
         mode: buddyMode,
         x: IS_MOBILE ? window.innerWidth - 60 : window.innerWidth - 120,
@@ -140,6 +149,16 @@
       reactWithCooldown(
         '{bold}Starred!{/bold} Don\'t forget your {color:green}hiking boots{/color}!'
       );
+    });
+
+    document.addEventListener('buddy:trigger', function(e) {
+      if (e.detail === 'lang-en') {
+        localStorage.setItem('sv_buddy_lang', 'en');
+        setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+      } else if (e.detail === 'lang-tr') {
+        localStorage.setItem('sv_buddy_lang', 'tr');
+        setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+      }
     });
 
     // --- Desktop icon toggle ---
