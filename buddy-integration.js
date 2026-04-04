@@ -157,7 +157,203 @@
       });
     }
 
+    // --- Debug color menu ---
+    var SEGMENT_LABELS = {
+      head: 'Head',
+      torso: 'Torso',
+      armL: 'Left Arm',
+      armR: 'Right Arm',
+      legL: 'Left Leg',
+      legR: 'Right Leg',
+    };
+    var STORAGE_KEY = 'sv_buddy_colors';
+    var debugPanel = null;
+
+    function hexFromInt(n) {
+      return '#' + ('000000' + n.toString(16)).slice(-6);
+    }
+
+    function intFromHex(hex) {
+      return parseInt(hex.replace('#', ''), 16);
+    }
+
+    function loadSavedColors() {
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) { return null; }
+    }
+
+    function saveColors(colors) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
+    }
+
+    function applyColors(colors) {
+      if (!buddy) return;
+      var segments = buddy.controller.buddy.segments;
+      for (var key in colors) {
+        if (segments[key]) {
+          segments[key].mesh.material.color.set(intFromHex(colors[key]));
+        }
+      }
+    }
+
+    function applySavedColors() {
+      var colors = loadSavedColors();
+      if (colors) applyColors(colors);
+    }
+
+    function getCurrentColors() {
+      if (!buddy) return {};
+      var segments = buddy.controller.buddy.segments;
+      var colors = {};
+      for (var key in SEGMENT_LABELS) {
+        colors[key] = hexFromInt(segments[key].mesh.material.color.getHex());
+      }
+      return colors;
+    }
+
+    function createDebugPanel() {
+      var panel = document.createElement('div');
+      panel.id = 'buddy-debug-panel';
+      panel.innerHTML = '<div class="bdp-title">Rocky Debug<button class="bdp-close">\u00d7</button></div><div class="bdp-body"></div>';
+
+      var style = document.createElement('style');
+      style.textContent =
+        '#buddy-debug-panel{position:fixed;top:60px;right:20px;z-index:1000001;width:220px;' +
+        'border-radius:8px;overflow:hidden;font-family:var(--font-main,system-ui,sans-serif);' +
+        'font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,0.25);border:1px solid var(--win-border-stroke,#97D6F4);' +
+        'background:var(--panel-bg,rgba(240,245,250,0.95));backdrop-filter:blur(8px)}' +
+        '.bdp-title{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;' +
+        'background:var(--panel-header-bg,linear-gradient(180deg,#09ACE2 0%,#058CB9 100%));' +
+        'color:#fff;font-weight:600;font-size:12px;text-shadow:0 1px 0 rgba(0,0,0,0.3);cursor:move}' +
+        '.bdp-close{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 2px;line-height:1}' +
+        '.bdp-close:hover{color:#fcc}' +
+        '.bdp-body{padding:8px 10px;display:flex;flex-direction:column;gap:6px}' +
+        '.bdp-row{display:flex;align-items:center;justify-content:space-between}' +
+        '.bdp-row label{font-size:12px;color:var(--text-dark,#1a1a2e)}' +
+        '.bdp-row input[type=color]{width:32px;height:22px;border:1px solid #b0c4d8;border-radius:3px;' +
+        'padding:0;cursor:pointer;background:none}' +
+        '.bdp-btn{display:block;width:100%;padding:4px 0;margin-top:2px;border:1px solid var(--accent-blue-dark,#058CB9);' +
+        'border-radius:4px;background:var(--btn-blue,linear-gradient(180deg,#4DC4EB 0%,#09ACE2 50%,#058CB9 100%));' +
+        'color:#fff;font-size:11px;font-weight:600;cursor:pointer;text-align:center}' +
+        '.bdp-btn:hover{background:var(--btn-blue-hover,linear-gradient(180deg,#5DD4FB 0%,#19BCE2 50%,#069CC9 100%))}';
+      document.head.appendChild(style);
+
+      var body = panel.querySelector('.bdp-body');
+      var inputs = {};
+
+      for (var key in SEGMENT_LABELS) {
+        var row = document.createElement('div');
+        row.className = 'bdp-row';
+        var lbl = document.createElement('label');
+        lbl.textContent = SEGMENT_LABELS[key];
+        var inp = document.createElement('input');
+        inp.type = 'color';
+        inp.dataset.seg = key;
+        inputs[key] = inp;
+        row.appendChild(lbl);
+        row.appendChild(inp);
+        body.appendChild(row);
+      }
+
+      // Reset button
+      var resetBtn = document.createElement('button');
+      resetBtn.className = 'bdp-btn';
+      resetBtn.textContent = 'Reset to Default';
+      body.appendChild(resetBtn);
+
+      document.body.appendChild(panel);
+
+      // Populate current colors
+      function syncInputs() {
+        var colors = getCurrentColors();
+        for (var k in colors) {
+          if (inputs[k]) inputs[k].value = colors[k];
+        }
+      }
+      syncInputs();
+
+      // Live color change
+      for (var seg in inputs) {
+        inputs[seg].addEventListener('input', function () {
+          var s = this.dataset.seg;
+          if (buddy && buddy.controller.buddy.segments[s]) {
+            buddy.controller.buddy.segments[s].mesh.material.color.set(intFromHex(this.value));
+          }
+          saveColors(getCurrentColors());
+        });
+      }
+
+      // Reset
+      resetBtn.addEventListener('click', function () {
+        localStorage.removeItem(STORAGE_KEY);
+        // Re-read default colors from the segments (they're already in the material,
+        // but we lost the originals — use the known defaults from Buddy3D)
+        var defaults = {
+          head: '#6b7b8d', torso: '#8b6b4a', armL: '#5a6b5a',
+          armR: '#5a6b5a', legL: '#7a7a7a', legR: '#7a7a7a',
+        };
+        applyColors(defaults);
+        syncInputs();
+      });
+
+      // Close button
+      panel.querySelector('.bdp-close').addEventListener('click', function () {
+        toggleDebugPanel();
+      });
+
+      // Draggable title bar
+      var titleBar = panel.querySelector('.bdp-title');
+      var dragging = false, dx = 0, dy = 0;
+      titleBar.addEventListener('pointerdown', function (e) {
+        if (e.target.classList.contains('bdp-close')) return;
+        dragging = true;
+        dx = e.clientX - panel.offsetLeft;
+        dy = e.clientY - panel.offsetTop;
+        e.preventDefault();
+      });
+      document.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        panel.style.left = (e.clientX - dx) + 'px';
+        panel.style.right = 'auto';
+        panel.style.top = (e.clientY - dy) + 'px';
+      });
+      document.addEventListener('pointerup', function () {
+        dragging = false;
+      });
+
+      return panel;
+    }
+
+    function toggleDebugPanel() {
+      if (debugPanel) {
+        debugPanel.remove();
+        debugPanel = null;
+      } else {
+        if (!buddy) return;
+        debugPanel = createDebugPanel();
+      }
+    }
+
+    // Ctrl+Shift+B toggles debug panel
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey && e.shiftKey && e.key === 'B') {
+        e.preventDefault();
+        toggleDebugPanel();
+      }
+    });
+
     // --- Start ---
+    // Patch initBuddy to apply saved colors after init
+    var _origInitBuddy = initBuddy;
+    initBuddy = function () {
+      _origInitBuddy();
+      // Apply saved colors after a short delay (models may still be loading)
+      setTimeout(applySavedColors, 500);
+      setTimeout(applySavedColors, 2000); // retry after models load
+    };
+
     if (visible) {
       initBuddy();
     }
