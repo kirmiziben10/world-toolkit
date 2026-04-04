@@ -38,6 +38,7 @@
   --radius-md: 8px;
   --backdrop-blur: blur(5px);
   --font-main: 'Ubuntu', 'Segoe UI', system-ui, sans-serif;
+  --rm-font: var(--font-main);
 
   /* Score colors — kept from original */
   --danger: #ef4444;

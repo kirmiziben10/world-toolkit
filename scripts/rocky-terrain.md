@@ -17,6 +17,8 @@
 # Responses
 <!-- responses -->
 
+<!-- group: Chat -->
+
 ## Greeting
 <!-- keywords: hello, hi, hey, greetings, sup, yo -->
 > {color:cyan}Hey!{/color} Ready to find some {bold}amazing views{/bold}?
@@ -25,14 +27,42 @@
 <!-- keywords: what are you, who are you, name, rocky -->
 > I'm {bold}Rocky{/bold}! A terrain-loving {rainbow}rock spirit{/rainbow} who knows all the best viewpoints!
 
-## Help
-<!-- keywords: help, commands, what can you do, how -->
-> {bold}Draw a rectangle{/bold} on the map, adjust the sliders, and click {color:green}Analyze Area{/color}! I'll react to what you find.
-
 ## Goodbye
 <!-- keywords: bye, goodbye, see you, later, cya -->
 > {color:blue}Happy trails!{/color} I'll be right here if you need me!
 <!-- trigger: wave -->
+
+## Feelings
+<!-- keywords: feel, feeling, how are you, mood -->
+> I'm {rainbow}feeling great{/rainbow}! Nothing beats a day of {shake}terrain analysis{/shake}!
+
+<!-- group: Guide -->
+
+## Help
+<!-- keywords: help, commands, what can you do, how -->
+> {bold}Draw a rectangle{/bold} on the map, adjust the sliders, and click {color:green}Analyze Area{/color}! I'll react to what you find.
+
+## Viewpoint
+<!-- keywords: viewpoint, scenic, vista, panorama, view, lookout -->
+> The best viewpoints have {bold}low slope{/bold} to stand on, a nearby {color:cyan}prominent peak{/color}, and a {rainbow}deep valley{/rainbow} for drama!
+
+## Globe
+<!-- keywords: globe, earth, planet, world, spin -->
+> Spin the {bold}globe{/bold} on the left! Click the label to {color:cyan}fly the map there{/color}!
+
+## Starred
+<!-- keywords: star, starred, bookmark, save, favorite -->
+> {bold}Stars{/bold} are for spots you want to {color:green}visit someday{/color}! They persist across sessions!
+
+## Loved
+<!-- keywords: love, loved, heart, like, favourite -->
+> {color:red}Loved spots{/color} are your {bold}absolute favourites{/bold}! Treasure them!
+
+## Tip
+<!-- keywords: tip, advice, suggest, recommend -->
+> My top tip: start with a {bold}small area{/bold} first, then {color:green}widen your search{/color} if you want more options!
+
+<!-- group: Terrain -->
 
 ## Elevation
 <!-- keywords: elevation, height, altitude, high, tall -->
@@ -50,10 +80,6 @@
 <!-- keywords: valley, depth, gorge, canyon, ravine -->
 > Deep valleys mean {bold}dramatic contrast{/bold} — imagine looking down from a viewpoint into a {shake}deep gorge{/shake}!
 
-## Viewpoint
-<!-- keywords: viewpoint, scenic, vista, panorama, view, lookout -->
-> The best viewpoints have {bold}low slope{/bold} to stand on, a nearby {color:cyan}prominent peak{/color}, and a {rainbow}deep valley{/rainbow} for drama!
-
 ## Weather
 <!-- keywords: weather, rain, sun, cloud, wind, fog -->
 > Clear days are {rainbow}magical{/rainbow} for views! But {color:purple}misty mornings{/color} can be {shake}otherworldly{/shake} too!
@@ -65,6 +91,8 @@
 ## Hike
 <!-- keywords: hike, hiking, walk, trek, trail -->
 > Always tell someone your {bold}route{/bold}! And carry {color:cyan}extra water{/color} — the mountains are {shake}thirsty work{/shake}!
+
+<!-- group: Emotes -->
 
 ## Fly
 <!-- keywords: fly, flying, float, jump, scatter -->
@@ -85,23 +113,3 @@
 <!-- keywords: dance, dancing, boogie -->
 > Rocks don't dance, but they {shake}tumble{/shake} with {rainbow}style{/rainbow}!
 <!-- trigger: fly -->
-
-## Globe
-<!-- keywords: globe, earth, planet, world, spin -->
-> Spin the {bold}globe{/bold} on the left! Click the label to {color:cyan}fly the map there{/color}!
-
-## Starred
-<!-- keywords: star, starred, bookmark, save, favorite -->
-> {bold}Stars{/bold} are for spots you want to {color:green}visit someday{/color}! They persist across sessions!
-
-## Loved
-<!-- keywords: love, loved, heart, like, favourite -->
-> {color:red}Loved spots{/color} are your {bold}absolute favourites{/bold}! Treasure them!
-
-## Tip
-<!-- keywords: tip, advice, suggest, recommend -->
-> My top tip: start with a {bold}small area{/bold} first, then {color:green}widen your search{/color} if you want more options!
-
-## Feelings
-<!-- keywords: feel, feeling, how are you, mood -->
-> I'm {rainbow}feeling great{/rainbow}! Nothing beats a day of {shake}terrain analysis{/shake}!

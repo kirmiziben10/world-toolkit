@@ -157,6 +157,70 @@
       });
     }
 
+    // --- Radial menu theme helpers ---
+    var RM_STORAGE_KEY = 'sv_rm_theme';
+
+    function hexToRgb(hex) {
+      var h = hex.replace('#', '');
+      return {
+        r: parseInt(h.substring(0, 2), 16),
+        g: parseInt(h.substring(2, 4), 16),
+        b: parseInt(h.substring(4, 6), 16),
+      };
+    }
+
+    function hexToRgba(hex, a) {
+      var c = hexToRgb(hex);
+      return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a + ')';
+    }
+
+    function lightenHex(hex, amount) {
+      var c = hexToRgb(hex);
+      var r = Math.min(255, c.r + Math.round(amount * 255));
+      var g = Math.min(255, c.g + Math.round(amount * 255));
+      var b = Math.min(255, c.b + Math.round(amount * 255));
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    function applyRmTheme(theme) {
+      var root = document.documentElement;
+      if (theme.accent) {
+        root.style.setProperty('--rm-border', hexToRgba(theme.accent, 0.5));
+        root.style.setProperty('--rm-border-hover', hexToRgba(theme.accent, 0.8));
+        root.style.setProperty('--rm-dot', hexToRgba(theme.accent, 0.5));
+        root.style.setProperty('--rm-dot-border', hexToRgba(theme.accent, 0.8));
+        root.style.setProperty('--rm-shadow-hover', '0 2px 20px ' + hexToRgba(theme.accent, 0.2) + ', 0 2px 12px rgba(0,0,0,0.15)');
+        root.style.setProperty('--rm-sub-border', hexToRgba(theme.accent, 0.4));
+        root.style.setProperty('--rm-sub-border-hover', hexToRgba(theme.accent, 0.7));
+        root.style.setProperty('--rm-indicator', hexToRgba(theme.accent, 0.5));
+      }
+      if (theme.bg) {
+        root.style.setProperty('--rm-bg', hexToRgba(theme.bg, 0.92));
+        root.style.setProperty('--rm-bg-hover', hexToRgba(lightenHex(theme.bg, -0.08), 0.96));
+        root.style.setProperty('--rm-sub-bg', hexToRgba(theme.bg, 0.94));
+        root.style.setProperty('--rm-sub-bg-hover', hexToRgba(lightenHex(theme.bg, -0.08), 0.97));
+      }
+      if (theme.text) {
+        root.style.setProperty('--rm-text', theme.text);
+        root.style.setProperty('--rm-sub-text', theme.text);
+      }
+    }
+
+    function loadRmTheme() {
+      try {
+        var raw = localStorage.getItem(RM_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) { return null; }
+    }
+
+    function saveRmTheme(theme) {
+      localStorage.setItem(RM_STORAGE_KEY, JSON.stringify(theme));
+    }
+
+    // Apply saved radial menu theme on load
+    var savedRmTheme = loadRmTheme();
+    if (savedRmTheme) applyRmTheme(savedRmTheme);
+
     // --- Debug color menu ---
     var SEGMENT_LABELS = {
       head: 'Head',
@@ -237,11 +301,20 @@
         '.bdp-btn{display:block;width:100%;padding:4px 0;margin-top:2px;border:1px solid var(--accent-blue-dark,#058CB9);' +
         'border-radius:4px;background:var(--btn-blue,linear-gradient(180deg,#4DC4EB 0%,#09ACE2 50%,#058CB9 100%));' +
         'color:#fff;font-size:11px;font-weight:600;cursor:pointer;text-align:center}' +
-        '.bdp-btn:hover{background:var(--btn-blue-hover,linear-gradient(180deg,#5DD4FB 0%,#19BCE2 50%,#069CC9 100%))}';
+        '.bdp-btn:hover{background:var(--btn-blue-hover,linear-gradient(180deg,#5DD4FB 0%,#19BCE2 50%,#069CC9 100%))}' +
+        '.bdp-section{font-size:11px;font-weight:700;color:var(--accent-blue-dark,#058CB9);' +
+        'margin-top:4px;padding-bottom:2px;border-bottom:1px solid var(--panel-border,rgba(5,140,185,0.25))}' +
+        '.bdp-section:first-child{margin-top:0}';
       document.head.appendChild(style);
 
       var body = panel.querySelector('.bdp-body');
       var inputs = {};
+
+      // --- Character Colors section ---
+      var charHeader = document.createElement('div');
+      charHeader.className = 'bdp-section';
+      charHeader.textContent = 'Character Colors';
+      body.appendChild(charHeader);
 
       for (var key in SEGMENT_LABELS) {
         var row = document.createElement('div');
@@ -262,6 +335,68 @@
       resetBtn.className = 'bdp-btn';
       resetBtn.textContent = 'Reset to Default';
       body.appendChild(resetBtn);
+
+      // --- Radial Menu section ---
+      var rmHeader = document.createElement('div');
+      rmHeader.className = 'bdp-section';
+      rmHeader.textContent = 'Radial Menu';
+      body.appendChild(rmHeader);
+
+      var RM_CONTROLS = {
+        accent: { label: 'Accent', defaultVal: '#09ACE2' },
+        bg: { label: 'Background', defaultVal: '#F0F5FA' },
+        text: { label: 'Text', defaultVal: '#1a1a2e' },
+      };
+      var rmInputs = {};
+      var currentRm = loadRmTheme() || {};
+
+      for (var rmKey in RM_CONTROLS) {
+        var rmRow = document.createElement('div');
+        rmRow.className = 'bdp-row';
+        var rmLbl = document.createElement('label');
+        rmLbl.textContent = RM_CONTROLS[rmKey].label;
+        var rmInp = document.createElement('input');
+        rmInp.type = 'color';
+        rmInp.dataset.rmkey = rmKey;
+        rmInp.value = currentRm[rmKey] || RM_CONTROLS[rmKey].defaultVal;
+        rmInputs[rmKey] = rmInp;
+        rmRow.appendChild(rmLbl);
+        rmRow.appendChild(rmInp);
+        body.appendChild(rmRow);
+      }
+
+      // Live radial menu color change
+      for (var rk in rmInputs) {
+        rmInputs[rk].addEventListener('input', function () {
+          var k = this.dataset.rmkey;
+          var theme = loadRmTheme() || {};
+          theme[k] = this.value;
+          saveRmTheme(theme);
+          applyRmTheme(theme);
+        });
+      }
+
+      // Reset radial menu
+      var rmResetBtn = document.createElement('button');
+      rmResetBtn.className = 'bdp-btn';
+      rmResetBtn.textContent = 'Reset Menu Colors';
+      rmResetBtn.addEventListener('click', function () {
+        localStorage.removeItem(RM_STORAGE_KEY);
+        // Remove custom properties to restore CSS defaults
+        var root = document.documentElement;
+        var rmProps = ['--rm-bg', '--rm-bg-hover', '--rm-border', '--rm-border-hover',
+          '--rm-text', '--rm-text-sub', '--rm-shadow', '--rm-shadow-hover',
+          '--rm-dot', '--rm-dot-border', '--rm-sub-bg', '--rm-sub-bg-hover',
+          '--rm-sub-border', '--rm-sub-border-hover', '--rm-sub-text', '--rm-indicator'];
+        for (var i = 0; i < rmProps.length; i++) {
+          root.style.removeProperty(rmProps[i]);
+        }
+        // Reset inputs to defaults
+        for (var dk in RM_CONTROLS) {
+          if (rmInputs[dk]) rmInputs[dk].value = RM_CONTROLS[dk].defaultVal;
+        }
+      });
+      body.appendChild(rmResetBtn);
 
       document.body.appendChild(panel);
 

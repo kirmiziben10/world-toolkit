@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/alphanumeric/Documents/Programming/AI/desktop-buddy/**)",
+      "Bash(pnpm build:*)",
+      "Bash(cp dist/desktop-buddy.iife.js /home/alphanumeric/Documents/Programming/AI/world-toolkit/vendor/desktop-buddy/desktop-buddy.iife.js)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(cp /home/alphanumeric/Documents/Programming/AI/desktop-buddy/dist/desktop-buddy.iife.js /home/alphanumeric/Documents/Programming/AI/world-toolkit/vendor/desktop-buddy/)",
+      "Bash(cp -r /home/alphanumeric/Documents/Programming/AI/desktop-buddy/dist/Models/ /home/alphanumeric/Documents/Programming/AI/world-toolkit/Models/)"
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true
+  }
+}
