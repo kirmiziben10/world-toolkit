@@ -229,6 +229,7 @@ function initDrawControls() {
     validateSelection(state.selectionBounds);
     pushBoundsHistory(state.selectionBounds);
     setupRectEditing(e.layer);
+    document.dispatchEvent(new CustomEvent('wt:rectangle-drawn'));
   });
 
   state.map.on(L.Draw.Event.DELETED, () => {
