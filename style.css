@@ -1530,6 +1530,7 @@ a.action-btn {
   position: fixed;
   z-index: 500000;
   pointer-events: none;
+  box-sizing: border-box;
   border: 2px solid var(--accent-cyan);
   box-shadow:
     0 0 0 4px rgba(151, 214, 244, 0.3),

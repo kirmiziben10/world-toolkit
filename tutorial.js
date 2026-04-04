@@ -345,6 +345,7 @@
     if (buddyRef) {
       buddyRef.controller.say('{rainbow}Tutorial complete!{/rainbow} You\'re ready to find amazing viewpoints!');
     }
+    document.dispatchEvent(new CustomEvent('wt:tutorial-done'));
   }
 
   // ==============================
@@ -389,8 +390,15 @@
   }
 
   function replay(buddy) {
+    // Clean up without re-setting localStorage (skip() would re-set it)
+    if (active) {
+      cleanupStep();
+      hideSkipBtn();
+      active = false;
+      currentStep = -1;
+      if (buddyRef) buddyRef.controller.dismissSpeech();
+    }
     localStorage.removeItem(STORAGE_KEY);
-    skip(); // clean up any lingering state
     start(buddy);
   }
 

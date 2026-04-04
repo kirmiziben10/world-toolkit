@@ -487,37 +487,32 @@
       setTimeout(applySavedColors, 500);
       setTimeout(applySavedColors, 2000); // retry after models load
       // Tutorial: start on first visit, add menu items
-      if (window.Tutorial) {
-        if (buddy.extraMenuItems) {
-          if (window.Tutorial.shouldRun()) {
-            buddy.extraMenuItems.push({
-              label: 'Skip Tutorial',
-              icon: '\u23ED',
-              action: function () {
-                window.Tutorial.skip();
-                // Replace skip with replay
-                buddy.extraMenuItems.length = 0;
-                buddy.extraMenuItems.push({
-                  label: 'Tutorial',
-                  icon: '\uD83D\uDCD6',
-                  action: function () {
-                    window.Tutorial.replay(buddy);
-                  },
-                });
-              },
-            });
-          } else {
-            buddy.extraMenuItems.push({
-              label: 'Tutorial',
-              icon: '\uD83D\uDCD6',
-              action: function () {
-                window.Tutorial.replay(buddy);
-              },
-            });
-          }
+      if (window.Tutorial && buddy.extraMenuItems) {
+        function setReplayMenuItem() {
+          buddy.extraMenuItems.length = 0;
+          buddy.extraMenuItems.push({
+            label: 'Tutorial',
+            icon: '\uD83D\uDCD6',
+            action: function () {
+              window.Tutorial.replay(buddy);
+            },
+          });
         }
+
         if (window.Tutorial.shouldRun()) {
+          buddy.extraMenuItems.push({
+            label: 'Skip Tutorial',
+            icon: '\u23ED',
+            action: function () {
+              window.Tutorial.skip();
+              setReplayMenuItem();
+            },
+          });
+          // Swap to replay item when tutorial completes naturally
+          document.addEventListener('wt:tutorial-done', setReplayMenuItem, { once: true });
           setTimeout(function () { window.Tutorial.start(buddy); }, 1500);
+        } else {
+          setReplayMenuItem();
         }
       }
     };
