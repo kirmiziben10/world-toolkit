@@ -649,6 +649,7 @@ function initButtons() {
       t('helpStep3'),
       t('helpStep4'),
       t('helpStep5'),
+      t('helpStep6'),
     ]);
   });
 
@@ -1601,6 +1602,9 @@ function createPopupContent(vp, index, vpId) {
         <div class="popup-stat-label">${t('prominence')}</div>
         <div class="popup-stat-value">${Math.round(vp.peakProminence)}m</div>
       </div>
+    </div>
+    <div class="popup-warning" role="note" aria-label="${t('accessWarning')}">
+      <strong>${t('accessWarning')}:</strong> ${t('privatePropertyWarning')}
     </div>
     <div class="popup-actions">
       <button class="action-btn like-btn popup-like ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
