@@ -251,7 +251,16 @@ function normalizeBaseLayerKey(value) {
 }
 
 // ===== Draw Controls =====
+function localizeDrawLocal() {
+  L.drawLocal.draw.toolbar.actions.text = t('cancel');
+  L.drawLocal.draw.toolbar.actions.title = t('cancelDrawing');
+  L.drawLocal.draw.handlers.rectangle.tooltip.start = t('drawRectTooltip');
+  L.drawLocal.edit.toolbar.actions.cancel.text = t('cancel');
+  L.drawLocal.edit.toolbar.actions.cancel.title = t('cancelEditing');
+}
+
 function initDrawControls() {
+  localizeDrawLocal();
   state.drawnItems = new L.FeatureGroup();
   state.map.addLayer(state.drawnItems);
 
@@ -361,7 +370,7 @@ function updateUndoRedoButtons() {
   if (redoBtnEl) redoBtnEl.disabled = state.historyIndex >= state.boundsHistory.length - 1;
 }
 
-// ===== Slider Bindings =====
+// ===== Custom Slider =====
 function initSliders() {
   const sliders = [
     { id: 'min-elevation', suffix: 'm' },
@@ -374,37 +383,187 @@ function initSliders() {
   sliders.forEach(({ id, suffix }) => {
     const input = document.getElementById(id);
     const display = document.getElementById(`${id}-val`);
+    const container = input.closest('.slider-track-container');
+    const { positionThumb } = buildCustomSlider(container, input);
     input.addEventListener('input', () => {
       display.textContent = input.value + suffix;
     });
+
+    // Editable label — click to type a value directly
+    display.style.cursor = 'pointer';
+    display.addEventListener('click', () => {
+      const editInput = document.createElement('input');
+      editInput.type = 'number';
+      editInput.className = 'label-value label-value-edit';
+      editInput.value = input.value;
+      editInput.style.width = display.offsetWidth + 'px';
+      display.replaceWith(editInput);
+      editInput.focus();
+      editInput.select();
+
+      const commit = () => {
+        const raw = parseFloat(editInput.value);
+        if (!isNaN(raw)) {
+          const step = +input.step;
+          const snapped = Math.round((raw - (+input.min)) / step) * step + (+input.min);
+          input.value = snapped;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          positionThumb();
+        }
+        display.textContent = input.value + suffix;
+        editInput.replaceWith(display);
+      };
+      editInput.addEventListener('blur', commit);
+      editInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') editInput.blur();
+        if (e.key === 'Escape') { editInput.value = input.value; editInput.blur(); }
+      });
+    });
   });
+}
+
+function buildCustomSlider(container, input) {
+  const min = +input.min, max = +input.max, step = +input.step;
+  const tallEvery = +(container.dataset.tallEvery || 5);
+  const numSteps = Math.round((max - min) / step);
+  const pad = 5; // px padding on each side matching CSS left/right
+
+  // --- Notches ---
+  const notchBar = document.createElement('div');
+  notchBar.className = 'slider-notches';
+  for (let i = 0; i <= numSteps; i++) {
+    const notch = document.createElement('div');
+    notch.className = 'slider-notch' + (i % tallEvery === 0 ? ' tall' : '');
+    notchBar.appendChild(notch);
+  }
+  container.appendChild(notchBar);
+
+  // --- Track line ---
+  const trackLine = document.createElement('div');
+  trackLine.className = 'slider-track-line';
+  container.appendChild(trackLine);
+
+  // --- Thumb ---
+  const thumb = document.createElement('div');
+  thumb.className = 'slider-thumb';
+  container.appendChild(thumb);
+
+  // Distribute notches evenly across the track width
+  function getTrackW() { return container.clientWidth - pad * 2; }
+
+  function layoutNotches() {
+    const trackW = getTrackW();
+    const notches = notchBar.children;
+    const count = notches.length;
+    if (count <= 1 || trackW <= 0) return;
+    const spacing = trackW / (count - 1);
+    for (let i = 0; i < count; i++) {
+      notches[i].style.position = 'absolute';
+      notches[i].style.left = (i * spacing - 0.5) + 'px';
+    }
+    // Match track line exactly to first–last notch span
+    trackLine.style.left = pad + 'px';
+    trackLine.style.width = (trackW + 1) + 'px';
+    positionThumb();
+  }
+
+  function positionThumb() {
+    const trackW = getTrackW();
+    const ratio = Math.max(0, Math.min(1, (+input.value - min) / (max - min)));
+    thumb.style.left = (pad + ratio * trackW - 5) + 'px';
+  }
+
+  // Snap value to nearest step
+  function snapValue(raw) {
+    const clamped = Math.max(min, Math.min(max, raw));
+    return Math.round((clamped - min) / step) * step + min;
+  }
+
+  // --- Drag handling ---
+  function onPointerDown(e) {
+    e.preventDefault();
+    thumb.classList.add('dragging');
+    const onMove = (ev) => {
+      const rect = container.getBoundingClientRect();
+      const x = (ev.clientX || ev.touches[0].clientX) - rect.left - pad;
+      const trackW = getTrackW();
+      const ratio = Math.max(0, Math.min(1, x / trackW));
+      const val = snapValue(min + ratio * (max - min));
+      if (+input.value !== val) {
+        input.value = val;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      positionThumb();
+    };
+    const onUp = () => {
+      thumb.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+    // Jump to click position
+    onMove(e);
+  }
+
+  thumb.addEventListener('mousedown', onPointerDown);
+  thumb.addEventListener('touchstart', onPointerDown, { passive: false });
+
+  // Also allow clicking directly on the track
+  container.addEventListener('mousedown', (e) => {
+    if (e.target === thumb) return;
+    onPointerDown(e);
+  });
+  container.addEventListener('touchstart', (e) => {
+    if (e.target === thumb) return;
+    onPointerDown(e);
+  }, { passive: false });
+
+  layoutNotches();
+  // Relayout on resize (e.g. controls panel toggle)
+  new ResizeObserver(() => layoutNotches()).observe(container);
+
+  return { positionThumb };
 }
 
 // ===== Button Bindings =====
 function initButtons() {
   document.getElementById('analyze-btn').addEventListener('click', startAnalysis);
 
-  // Recycle Bin icon — show menu
-  const recycleBin = document.getElementById('icon-recycle-bin');
+  // Leaflet trash button — intercept click to show menu
   const recycleMenu = document.getElementById('recycle-menu');
 
-  recycleBin.addEventListener('click', (e) => {
-    iconPop(recycleBin);
-    if (!recycleMenu.hidden) { recycleMenu.hidden = true; return; }
-    // Position menu near the icon
-    const rect = recycleBin.getBoundingClientRect();
-    recycleMenu.style.left = (rect.right + 4) + 'px';
-    recycleMenu.style.top = rect.top + 'px';
-    // Enable/disable items based on state
-    document.getElementById('recycle-clear-all').disabled =
-      state.resultMarkers.length === 0 && !state.selectionBounds;
-    document.getElementById('recycle-clear-selection').disabled = !state.selectionBounds;
-    recycleMenu.hidden = false;
-  });
+  // Wait for Leaflet.Draw to render, then hijack the trash button
+  setTimeout(() => {
+    const trashBtn = document.querySelector('.leaflet-draw-edit-remove');
+    if (!trashBtn) return;
+
+    trashBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!recycleMenu.hidden) { recycleMenu.hidden = true; return; }
+      const btnRect = trashBtn.getBoundingClientRect();
+      // Briefly show off-screen to measure width
+      recycleMenu.style.visibility = 'hidden';
+      recycleMenu.hidden = false;
+      const menuW = recycleMenu.offsetWidth;
+      recycleMenu.style.visibility = '';
+      recycleMenu.style.left = (btnRect.left - menuW - 4) + 'px';
+      recycleMenu.style.top = btnRect.top + 'px';
+      document.getElementById('recycle-clear-all').disabled =
+        state.resultMarkers.length === 0 && !state.selectionBounds;
+      document.getElementById('recycle-clear-selection').disabled = !state.selectionBounds;
+    }, true); // capture phase to beat Leaflet's handler
+  }, 0);
 
   // Dismiss menu on outside click
   document.addEventListener('click', (e) => {
-    if (!recycleMenu.hidden && !recycleMenu.contains(e.target) && !recycleBin.contains(e.target)) {
+    if (!recycleMenu.hidden && !recycleMenu.contains(e.target) &&
+        !e.target.closest('.leaflet-draw-edit-remove')) {
       recycleMenu.hidden = true;
     }
   });
@@ -414,7 +573,6 @@ function initButtons() {
     recycleMenu.hidden = true;
     clearResults();
     document.getElementById('results-panel').hidden = true;
-    // Also clear selection
     state.drawnItems.clearLayers();
     state.selectionBounds = null;
     state.boundsHistory = [null];
@@ -432,7 +590,6 @@ function initButtons() {
     state.historyIndex = 0;
     validateSelection(null);
     updateUndoRedoButtons();
-    // Remove tile boundaries but keep result markers
     state.tileBoundaries.forEach((layer) => state.map.removeLayer(layer));
     state.tileBoundaries = [];
   });
@@ -1582,6 +1739,7 @@ function hideProgress() {
 }
 
 function handleLanguageChange() {
+  localizeDrawLocal();
   rebuildLayerControl();
   validateSelection(state.selectionBounds);
 

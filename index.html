@@ -41,13 +41,9 @@
       <img src="assets/rocky_icon.svg" alt="Rocky" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="rocky">Rocky</span>
     </div>
-    <div class="desktop-icon" id="icon-recycle-bin" title="Recycle Bin" data-i18n-attr="title:recycleBin">
-      <img src="assets/Bin closed.svg" alt="Recycle Bin" class="desktop-icon-img">
-      <span class="desktop-icon-label" data-i18n="recycleBin">Recycle Bin</span>
-    </div>
   </div>
 
-  <!-- Recycle Bin context menu -->
+  <!-- Leaflet trash menu -->
   <div id="recycle-menu" class="recycle-menu" hidden>
     <button class="recycle-menu-item" id="recycle-clear-all" data-i18n="clearAll">Clear All</button>
     <button class="recycle-menu-item" id="recycle-clear-selection" data-i18n="clearSelection">Clear Selection</button>
@@ -116,7 +112,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="minimumElevation">Minimum Elevation</span>
               <div class="slider-row">
-                <div class="slider-track-container">
+                <div class="slider-track-container" data-tall-every="5">
                   <input type="range" id="min-elevation" min="0" max="3000" value="200" step="50">
                 </div>
                 <span class="label-value" id="min-elevation-val">200m</span>
@@ -126,7 +122,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="maxSlope">Max Slope</span>
               <div class="slider-row">
-                <div class="slider-track-container">
+                <div class="slider-track-container" data-tall-every="5">
                   <input type="range" id="max-slope" min="1" max="45" value="15" step="1">
                 </div>
                 <span class="label-value" id="max-slope-val">15°</span>
@@ -140,7 +136,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="closeness">Closeness</span>
               <div class="slider-row">
-                <div class="slider-track-container">
+                <div class="slider-track-container" data-tall-every="5">
                   <input type="range" id="search-radius" min="1" max="20" value="5" step="1">
                 </div>
                 <span class="label-value" id="search-radius-val">5 km</span>
@@ -150,7 +146,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="valleyDepth">Valley depth</span>
               <div class="slider-row">
-                <div class="slider-track-container">
+                <div class="slider-track-container" data-tall-every="5">
                   <input type="range" id="min-valley-depth" min="10" max="500" value="50" step="10">
                 </div>
                 <span class="label-value" id="min-valley-depth-val">50m</span>
@@ -160,7 +156,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="minPeakProminence">Min Peak Prominence</span>
               <div class="slider-row">
-                <div class="slider-track-container">
+                <div class="slider-track-container" data-tall-every="4">
                   <input type="range" id="min-prominence" min="50" max="1000" value="200" step="25">
                 </div>
                 <span class="label-value" id="min-prominence-val">200m</span>

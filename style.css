@@ -518,6 +518,45 @@ html, body {
   background-repeat: no-repeat !important;
 }
 
+/* ===== Leaflet Draw Actions (Cancel bar) ===== */
+.leaflet-draw-actions {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none !important;
+  overflow: hidden;
+  left: auto !important;
+  right: 45px !important;
+  top: 0 !important;
+}
+.leaflet-draw-actions li {
+  background: none !important;
+  border: none !important;
+}
+.leaflet-draw-actions li:not(:last-child) {
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+.leaflet-draw-actions a {
+  background: none !important;
+  color: var(--text-dark) !important;
+  font-size: 13px !important;
+  padding: 7px 16px !important;
+  line-height: normal !important;
+  height: auto !important;
+  width: auto !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  display: block !important;
+}
+.leaflet-draw-actions a:hover {
+  background: rgba(100, 160, 255, 0.25) !important;
+}
+
 /* ===== Rectangle Edit Handles ===== */
 .leaflet-editing-icon {
   width: 12px !important;
@@ -716,6 +755,27 @@ html, body {
   box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.2);
   white-space: nowrap;
   flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 16px;
+}
+.label-value-edit {
+  font-size: 12px;
+  font-weight: 400;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+  background: rgba(238, 228, 199, 0.8);
+  border: 0.5px solid #E1CC94;
+  border-radius: 3px;
+  padding: 2px 3px;
+  box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.2);
+  outline: none;
+  margin-top: -10px;
+  -moz-appearance: textfield;
+}
+.label-value-edit::-webkit-inner-spin-button,
+.label-value-edit::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Slider row: track + value inline */
@@ -725,7 +785,7 @@ html, body {
   gap: 5px;
 }
 
-/* ===== Ruler-style Slider Track ===== */
+/* ===== Custom Ruler Slider ===== */
 .slider-track-container {
   position: relative;
   width: 195px;
@@ -733,112 +793,77 @@ html, body {
   height: 30px;
 }
 
-/*
- * Tick pattern: 1 tall (10px) then 4 short (5px), repeating.
- * Every 5th tick is tall. We create 1px wide ticks spaced by 4px gap = 5px total cycle per tick.
- * So the repeating block for 5 ticks is 25px wide.
- * The gradient draws 1px black, 4px transparent.
- */
-.slider-track-container::before {
-  content: '';
+/* Hide native input — used only for value storage */
+.slider-track-container input[type="range"] {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Notch bar */
+.slider-notches {
   position: absolute;
   left: 5px;
   right: 5px;
   top: 4px;
   height: 10px;
-  /* All ticks at full 10px height */
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #808080 0px, #808080 1px,
-      transparent 1px, transparent 5px
-    );
-  /* Mask: every 5th tick (at 25px cycle) is full height;
-     the other 4 are cropped to bottom 5px only */
-  -webkit-mask-image:
-    /* Layer 1: tall tick — 1px wide every 25px, full height */
-    repeating-linear-gradient(
-      90deg,
-      black 0px, black 1px,
-      transparent 1px, transparent 25px
-    ),
-    /* Layer 2: all ticks but only bottom 5px */
-    linear-gradient(180deg, transparent 5px, black 5px);
-  -webkit-mask-composite: source-over;
-  mask-image:
-    repeating-linear-gradient(
-      90deg,
-      black 0px, black 1px,
-      transparent 1px, transparent 25px
-    ),
-    linear-gradient(180deg, transparent 5px, black 5px);
-  mask-composite: add;
+  display: flex;
+  align-items: flex-end;
   pointer-events: none;
 }
+.slider-notch {
+  flex: none;
+  width: 1px;
+  background: #808080;
+  height: 5px;
+}
+.slider-notch.tall {
+  height: 10px;
+}
 
-/* Horizontal track line — centered vertically */
-.slider-track-container::after {
-  content: '';
+/* Track line — width set dynamically by JS to match notch span */
+.slider-track-line {
   position: absolute;
-  left: 5px;
-  right: 5px;
   top: 14px;
   height: 1px;
   background: #808080;
   pointer-events: none;
 }
 
-/* Range slider — ruler-style */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 30px;
-  background: transparent;
-  outline: none;
-  cursor: pointer;
-  position: relative;
-  z-index: 1;
-  margin: 0;
-}
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 1px;
-  background: transparent;
-  margin-top: 0;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
+/* Draggable thumb — real DOM element for backdrop-filter */
+.slider-thumb {
+  position: absolute;
   width: 10px;
   height: 20px;
+  top: 5px;
   border-radius: 3px;
-  background: rgba(217, 217, 217, 0.8);
-  border: none;
+  cursor: pointer;
+  z-index: 2;
+  touch-action: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background: rgba(217, 217, 217, 0.55);
   border-top: 2px solid #68AC59;
   border-bottom: 2px solid #68AC59;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-  margin-top: -10px;
-  transition: box-shadow 0.12s ease;
+  border-left: none;
+  border-right: none;
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.3),
+    0 2px 2px rgba(0, 0, 0, 0.2),
+    inset 0 0 3px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.12s ease, background 0.12s ease;
 }
-input[type="range"]::-webkit-slider-thumb:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  background: rgba(230, 230, 230, 0.9);
-}
-input[type="range"]::-moz-range-track {
-  height: 1px;
-  background: transparent;
-  border: none;
-}
-input[type="range"]::-moz-range-thumb {
-  width: 10px;
-  height: 20px;
-  border-radius: 3px;
-  background: rgba(217, 217, 217, 0.8);
-  border: none;
-  border-top: 2px solid #68AC59;
-  border-bottom: 2px solid #68AC59;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+.slider-thumb:hover,
+.slider-thumb.dragging {
+  background: rgba(230, 230, 230, 0.6);
+  border-top-color: #78bc69;
+  border-bottom-color: #78bc69;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 2px 3px rgba(0, 0, 0, 0.25),
+    inset 0 0 3px rgba(0, 0, 0, 0.25);
 }
 
 /* Undo / Redo row */
