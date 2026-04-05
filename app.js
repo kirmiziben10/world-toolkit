@@ -19,6 +19,7 @@ let analyzeBtnEl = null;
 let analyzeBtnTextEl = null;
 let undoBtnEl = null;
 let redoBtnEl = null;
+let layerControl = null;
 
 // ===== State =====
 const state = {
@@ -37,6 +38,7 @@ const state = {
   boundsHistory: [],
   historyIndex: -1,
   editDebounce: null,
+  baseLayers: null,
 };
 
 // ===== localStorage Persistence =====
@@ -89,7 +91,10 @@ function restoreWindowLayout(winId) {
 }
 
 // ===== Initialize =====
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  const ready = window.i18n && window.i18n.ready ? window.i18n.ready : Promise.resolve();
+  ready.then(init);
+});
 
 function init() {
   analyzeBtnEl = document.getElementById('analyze-btn');
@@ -118,6 +123,8 @@ function init() {
   requestAnimationFrame(() => {
     if (state.map) state.map.invalidateSize();
   });
+
+  document.addEventListener('i18n:changed', handleLanguageChange);
 }
 
 // ===== Map Setup =====
@@ -162,23 +169,27 @@ function initMap() {
     }
   );
 
-  const baseLayers = {
-    [t('layerStandard')]: osm,
-    [t('layerTopographic')]: topo,
-    [t('layerWorldTopo')]: worldTopo,
-    [t('layerSatellite')]: satellite,
+  state.baseLayers = {
+    standard: osm,
+    topographic: topo,
+    worldTopo: worldTopo,
+    satellite: satellite,
   };
+  state.baseLayers.standard.options.svBaseLayerKey = 'standard';
+  state.baseLayers.topographic.options.svBaseLayerKey = 'topographic';
+  state.baseLayers.worldTopo.options.svBaseLayerKey = 'worldTopo';
+  state.baseLayers.satellite.options.svBaseLayerKey = 'satellite';
 
   // Restore saved base layer or default to topo
-  const savedLayer = localStorage.getItem('sv_base_layer');
-  (baseLayers[savedLayer] || topo).addTo(state.map);
+  const savedLayer = normalizeBaseLayerKey(localStorage.getItem('sv_base_layer'));
+  (state.baseLayers[savedLayer] || state.baseLayers.topographic).addTo(state.map);
 
-  L.control.layers(baseLayers, null, { position: 'topright' }).addTo(state.map);
+  rebuildLayerControl();
   L.control.zoom({ position: 'topright' }).addTo(state.map);
 
   // Persist base layer choice
   state.map.on('baselayerchange', (e) => {
-    localStorage.setItem('sv_base_layer', e.name);
+    localStorage.setItem('sv_base_layer', e.layer && e.layer.options && e.layer.options.svBaseLayerKey || 'topographic');
   });
 
   // Restore saved map position
@@ -197,6 +208,46 @@ function initMap() {
       lat: c.lat, lng: c.lng, zoom: state.map.getZoom(),
     }));
   });
+}
+
+function getLocalizedBaseLayers() {
+  return {
+    [t('layerStandard')]: state.baseLayers.standard,
+    [t('layerTopographic')]: state.baseLayers.topographic,
+    [t('layerWorldTopo')]: state.baseLayers.worldTopo,
+    [t('layerSatellite')]: state.baseLayers.satellite,
+  };
+}
+
+function rebuildLayerControl() {
+  if (!state.map || !state.baseLayers) return;
+  if (layerControl) {
+    state.map.removeControl(layerControl);
+  }
+  layerControl = L.control.layers(getLocalizedBaseLayers(), null, { position: 'topright' });
+  layerControl.addTo(state.map);
+}
+
+function normalizeBaseLayerKey(value) {
+  if (value === 'standard' || value === 'topographic' || value === 'worldTopo' || value === 'satellite') {
+    return value;
+  }
+
+  var legacyMap = {};
+  legacyMap[t('layerStandard')] = 'standard';
+  legacyMap[t('layerTopographic')] = 'topographic';
+  legacyMap[t('layerWorldTopo')] = 'worldTopo';
+  legacyMap[t('layerSatellite')] = 'satellite';
+  legacyMap.Standard = 'standard';
+  legacyMap.Topographic = 'topographic';
+  legacyMap['World Topo (Esri)'] = 'worldTopo';
+  legacyMap.Satellite = 'satellite';
+  legacyMap.Standart = 'standard';
+  legacyMap.Topografik = 'topographic';
+  legacyMap['Dünya Topo (Esri)'] = 'worldTopo';
+  legacyMap.Uydu = 'satellite';
+
+  return legacyMap[value] || 'topographic';
 }
 
 // ===== Draw Controls =====
@@ -1482,4 +1533,22 @@ function updateProgress(text, percent, detail) {
 
 function hideProgress() {
   document.getElementById('progress-overlay').hidden = true;
+}
+
+function handleLanguageChange() {
+  rebuildLayerControl();
+  validateSelection(state.selectionBounds);
+
+  if (!document.getElementById('loved-window').hidden) {
+    renderSavedPanel('loved');
+  }
+  if (!document.getElementById('starred-window').hidden) {
+    renderSavedPanel('starred');
+  }
+  if (!document.getElementById('results-panel').hidden || state.results.length > 0) {
+    const resultsPanel = document.getElementById('results-panel');
+    const wasHidden = resultsPanel.hidden;
+    displayResults(state.results.slice());
+    resultsPanel.hidden = wasHidden;
+  }
 }

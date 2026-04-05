@@ -232,13 +232,17 @@
       if (e.detail === 'spin-globe') {
         orchestrateGlobeSpin();
       } else if (e.detail === 'lang-en') {
-        localStorage.setItem('sv_buddy_lang', 'en');
-        if (window.i18n) window.i18n.translatePage();
-        setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+        if (window.i18n) {
+          window.i18n.setLang('en').then(function () {
+            setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+          });
+        }
       } else if (e.detail === 'lang-tr') {
-        localStorage.setItem('sv_buddy_lang', 'tr');
-        if (window.i18n) window.i18n.translatePage();
-        setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+        if (window.i18n) {
+          window.i18n.setLang('tr').then(function () {
+            setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
+          });
+        }
       }
     });
 
