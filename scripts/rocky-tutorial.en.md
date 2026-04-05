@@ -5,17 +5,17 @@
 ## Step 1: Open the app
 <!-- target: #icon-search-spots -->
 <!-- target-mobile: #icon-search-spots -->
-<!-- wait: dblclick #icon-search-spots -->
+<!-- wait: visible #main-window:not([hidden]) -->
 <!-- arm: right -->
-> {color:cyan}Welcome!{/color} Double-click this icon to start exploring!
+> {color:cyan}Welcome!{/color} This app finds scenic viewpoints with mountain views using real elevation data — pick any area on the map and I'll analyze the terrain for you! {bold}Double-click this icon{/bold} to get started!
 
-<!-- timeout: 10 -->
-> Still here? Just {bold}double-click{/bold} that icon!
+<!-- timeout: 15 -->
+> Just {bold}double-click{/bold} that icon and we'll find some amazing spots together!
 
-<!-- timeout: 25 -->
+<!-- timeout: 30 -->
 > Come on, give it a try! I'm pointing right at it!
 
-<!-- timeout: 45 -->
+<!-- timeout: 50 -->
 > {shake}I'll wait all day if I have to!{/shake}
 
 ## Step 2: Draw a rectangle

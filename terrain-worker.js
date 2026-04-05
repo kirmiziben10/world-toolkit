@@ -22,18 +22,18 @@ self.onmessage = function (e) {
     const centerLat = pixelToLat(centerY, tileInfo);
     const mpp = metersPerPixel(centerLat, zoom);
 
-    progress('Computing slope map...', 5);
+    progress('workerSlope', 5);
     const slopes = computeSlope(elevations, width, height, mpp);
 
-    progress('Finding mountain peaks...', 20);
+    progress('workerPeaks', 20);
     const peaks = findPeaks(elevations, slopes, width, height, mpp, params.minProminence);
-    progress(`Found ${peaks.length} peaks`, 35, `Prominence ≥ ${params.minProminence}m`);
+    progress('workerFoundPeaks', 35, 'workerProminence', {n: peaks.length, min: params.minProminence});
 
-    progress('Searching for scenic viewpoints...', 40);
+    progress('workerSearching', 40);
     const viewpoints = findViewpoints(elevations, slopes, peaks, width, height, mpp, tileInfo, params);
-    progress(`Found ${viewpoints.length} candidates`, 70);
+    progress('workerCandidates', 70, '', {n: viewpoints.length});
 
-    progress('Clustering nearby results...', 75);
+    progress('workerClustering', 75);
     const clustered = clusterResults(viewpoints, CLUSTER_DISTANCE_M, mpp);
 
     // Convert pixel coords to lat/lng and compute bearing
@@ -59,7 +59,7 @@ self.onmessage = function (e) {
       };
     });
 
-    progress('Done!', 100, `${results.length} viewpoints found`);
+    progress('workerDone', 100, 'workerResultCount', {n: results.length});
     self.postMessage({ type: 'result', viewpoints: results });
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message });
@@ -67,8 +67,8 @@ self.onmessage = function (e) {
 };
 
 // ===== Progress Reporting =====
-function progress(text, percent, detail) {
-  self.postMessage({ type: 'progress', text, percent, detail: detail || '' });
+function progress(key, percent, detailKey, params) {
+  self.postMessage({ type: 'progress', key: key, percent: percent, detailKey: detailKey || '', params: params || {} });
 }
 
 // ===== Coordinate Conversions =====
@@ -200,7 +200,7 @@ function findViewpoints(elev, slopes, peaks, w, h, mpp, tileInfo, params) {
     // Progress update every few rows
     if (y % (SUBSAMPLE * 20) === 0) {
       const pct = (y / h) * 100;
-      progress('Scanning for viewpoints...', 40 + pct * 0.3, `Row ${y} / ${h}`);
+      progress('workerScanning', 40 + pct * 0.3, 'workerScanRow', {y: y, h: h});
     }
 
     for (let x = SUBSAMPLE; x < w - SUBSAMPLE; x += SUBSAMPLE) {

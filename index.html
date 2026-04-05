@@ -25,27 +25,27 @@
 
   <!-- Desktop Icons -->
   <div id="desktop-icons">
-    <div class="desktop-icon" id="icon-search-spots" title="Search for Spots">
+    <div class="desktop-icon" id="icon-search-spots" title="Search for Spots" data-i18n-attr="title:searchForSpots">
       <img src="assets/map_icon.svg" alt="Search" class="desktop-icon-img">
-      <span class="desktop-icon-label">Search for Spots</span>
+      <span class="desktop-icon-label" data-i18n="searchForSpots">Search for Spots</span>
     </div>
-    <div class="desktop-icon" id="icon-starred-spots" title="Starred Spots">
+    <div class="desktop-icon" id="icon-starred-spots" title="Starred Spots" data-i18n-attr="title:starredSpots">
       <img src="assets/star_icon.svg" alt="Starred" class="desktop-icon-img">
-      <span class="desktop-icon-label">Starred Spots</span>
+      <span class="desktop-icon-label" data-i18n="starredSpots">Starred Spots</span>
     </div>
-    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots">
+    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots" data-i18n-attr="title:lovedSpots">
       <img src="assets/heart_icon.svg" alt="Loved" class="desktop-icon-img">
-      <span class="desktop-icon-label">Loved Spots</span>
+      <span class="desktop-icon-label" data-i18n="lovedSpots">Loved Spots</span>
     </div>
-    <div class="desktop-icon" id="icon-rocky" title="Rocky">
+    <div class="desktop-icon" id="icon-rocky" title="Rocky" data-i18n-attr="title:rocky">
       <img src="assets/rocky_icon.svg" alt="Rocky" class="desktop-icon-img">
-      <span class="desktop-icon-label">Rocky</span>
+      <span class="desktop-icon-label" data-i18n="rocky">Rocky</span>
     </div>
   </div>
 
   <!-- Search Bar (Win7 style) -->
   <div id="search-bar">
-    <input type="text" id="search-input" placeholder="Search " readonly>
+    <input type="text" id="search-input" placeholder="Search " readonly data-i18n-placeholder="searchPlaceholder">
     <img src="assets/magnifier_icon.svg" alt="Search" class="search-magnifier">
   </div>
 
@@ -58,18 +58,18 @@
     <div id="window-titlebar">
       <div class="titlebar-leading">
         <img src="assets/search_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text">Search For Spots</span>
+        <span class="titlebar-text" data-i18n="searchForSpotsTitle">Search For Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn" id="btn-help" title="Help">
+        <button class="titlebar-btn" id="btn-help" title="Help" data-i18n-attr="title:help">
           <img src="assets/help_icon.svg" alt="Help" width="20" height="20">
         </button>
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-main" title="Maximize">
+        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-main" title="Maximize" data-i18n-attr="title:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close" title="Close">
+        <button class="titlebar-btn" id="btn-close" title="Close" data-i18n-attr="title:close">
           <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
         </button>
       </div>
@@ -93,18 +93,18 @@
     <!-- Window Content -->
     <div id="window-content">
       <!-- Controls Panel (flush left side panel) -->
-      <div id="controls-toggle" class="controls-toggle" title="Toggle filters">
+      <div id="controls-toggle" class="controls-toggle" title="Toggle filters" data-i18n-attr="title:toggleFilters">
         <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
       <aside id="controls-panel">
         <div class="panel-content">
-          <div class="slider-group-label">Viewpoint Criteria</div>
+          <div class="slider-group-label" data-i18n="viewpointCriteria">Viewpoint Criteria</div>
 
           <div class="controls-grid">
             <div class="control-group">
-              <span class="label-text">Minimum Elevation</span>
+              <span class="label-text" data-i18n="minimumElevation">Minimum Elevation</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-elevation" min="0" max="3000" value="200" step="50">
@@ -114,7 +114,7 @@
             </div>
 
             <div class="control-group">
-              <span class="label-text">Max Slope</span>
+              <span class="label-text" data-i18n="maxSlope">Max Slope</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="max-slope" min="1" max="45" value="15" step="1">
@@ -124,11 +124,11 @@
             </div>
           </div>
 
-          <div class="slider-group-label">Scenery</div>
+          <div class="slider-group-label" data-i18n="scenery">Scenery</div>
 
           <div class="controls-grid">
             <div class="control-group">
-              <span class="label-text">Closeness</span>
+              <span class="label-text" data-i18n="closeness">Closeness</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="search-radius" min="1" max="20" value="5" step="1">
@@ -138,7 +138,7 @@
             </div>
 
             <div class="control-group">
-              <span class="label-text">Valley depth</span>
+              <span class="label-text" data-i18n="valleyDepth">Valley depth</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-valley-depth" min="10" max="500" value="50" step="10">
@@ -148,7 +148,7 @@
             </div>
 
             <div class="control-group">
-              <span class="label-text">Min Peak Prominence</span>
+              <span class="label-text" data-i18n="minPeakProminence">Min Peak Prominence</span>
               <div class="slider-row">
                 <div class="slider-track-container">
                   <input type="range" id="min-prominence" min="50" max="1000" value="200" step="25">
@@ -159,15 +159,15 @@
           </div>
 
           <div class="undo-redo-row">
-            <button id="undo-btn" class="undo-redo-btn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
-            <button id="redo-btn" class="undo-redo-btn" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
+            <button id="undo-btn" class="undo-redo-btn" title="Undo (Ctrl+Z)" disabled data-i18n="undo" data-i18n-attr="title:undoTooltip">↶ Undo</button>
+            <button id="redo-btn" class="undo-redo-btn" title="Redo (Ctrl+Shift+Z)" disabled data-i18n="redo" data-i18n-attr="title:redoTooltip">↷ Redo</button>
           </div>
 
           <button id="analyze-btn" class="xp-primary-btn" disabled>
-            <span class="btn-text">Analyze Area</span>
+            <span class="btn-text" data-i18n="analyzeArea">Analyze Area</span>
           </button>
 
-          <button id="clear-btn" class="xp-secondary-btn" hidden>
+          <button id="clear-btn" class="xp-secondary-btn" hidden data-i18n="clearResults">
             Clear Results
           </button>
         </div>
@@ -180,7 +180,7 @@
       <div id="results-panel" class="xp-panel" hidden>
         <div class="xp-panel-header">
           <h2>Viewpoints <span id="results-count" class="badge">0</span></h2>
-          <button id="close-results" class="xp-icon-btn" title="Close">✕</button>
+          <button id="close-results" class="xp-icon-btn" title="Close" data-i18n-attr="title:close">✕</button>
         </div>
         <div id="results-list" class="results-list"></div>
       </div>
@@ -189,8 +189,8 @@
       <div id="progress-overlay" hidden>
         <div class="progress-card xp-dialog">
           <div class="progress-spinner"></div>
-          <h3 id="progress-title">Analyzing Terrain</h3>
-          <p id="progress-text">Preparing...</p>
+          <h3 id="progress-title" data-i18n="analyzingTerrain">Analyzing Terrain</h3>
+          <p id="progress-text" data-i18n="preparing">Preparing...</p>
           <div class="progress-track">
             <div id="progress-bar" class="progress-fill"></div>
           </div>
@@ -205,15 +205,15 @@
     <div id="loved-window-titlebar" class="window-titlebar">
       <div class="titlebar-leading">
         <img src="assets/heart_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text">Loved Spots</span>
+        <span class="titlebar-text" data-i18n="lovedSpotsTitle">Loved Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-loved" title="Maximize">
+        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-loved" title="Maximize" data-i18n-attr="title:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-loved" title="Close">
+        <button class="titlebar-btn" id="btn-close-loved" title="Close" data-i18n-attr="title:close">
           <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
         </button>
       </div>
@@ -242,15 +242,15 @@
     <div id="starred-window-titlebar" class="window-titlebar">
       <div class="titlebar-leading">
         <img src="assets/star_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text">Starred Spots</span>
+        <span class="titlebar-text" data-i18n="starredSpotsTitle">Starred Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-starred" title="Maximize">
+        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-starred" title="Maximize" data-i18n-attr="title:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-starred" title="Close">
+        <button class="titlebar-btn" id="btn-close-starred" title="Close" data-i18n-attr="title:close">
           <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
         </button>
       </div>
@@ -302,6 +302,8 @@
       });
     })();
   </script>
+  <script src="i18n.js"></script>
+  <script>if (window.i18n) window.i18n.translatePage();</script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>

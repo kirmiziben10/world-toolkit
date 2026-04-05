@@ -8,6 +8,7 @@ const MAX_TILES = 80;
 const RECT_STYLE = {
   color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
 };
+const t = window.i18n.t;
 
 // ===== Mobile Detection =====
 const IS_MOBILE = window.matchMedia('(max-width: 600px)').matches ||
@@ -50,10 +51,10 @@ function makeSpotId(vp) {
 }
 
 // ===== Compass Helpers =====
-const COMPASS_LABELS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const COMPASS_LABELS = () => t('compass');
 function bearingToCompass(deg) {
   const idx = Math.round(((deg % 360) + 360) % 360 / 22.5) % 16;
-  return COMPASS_LABELS[idx];
+  return COMPASS_LABELS()[idx];
 }
 
 // ===== Window Layout Persistence =====
@@ -162,10 +163,10 @@ function initMap() {
   );
 
   const baseLayers = {
-    'Standard': osm,
-    'Topographic': topo,
-    'World Topo (Esri)': worldTopo,
-    'Satellite': satellite,
+    [t('layerStandard')]: osm,
+    [t('layerTopographic')]: topo,
+    [t('layerWorldTopo')]: worldTopo,
+    [t('layerSatellite')]: satellite,
   };
 
   // Restore saved base layer or default to topo
@@ -388,11 +389,11 @@ function initButtons() {
   document.getElementById('btn-help').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleHelpTooltip(e.currentTarget, [
-      'Draw a selection: click the rectangle icon in the map toolbar (top-right) and drag to mark an area.',
-      'Set criteria: use the sliders to control minimum elevation, max slope, peak closeness, valley depth, and peak prominence.',
-      'Click "Analyze Area" — terrain data is fetched and analyzed entirely in your browser.',
-      'Explore results: directional markers show viewpoints on the map. Click a marker or result card for details.',
-      'Save favourites: use ❤️ Love or ⭐ Star buttons to bookmark spots across sessions.',
+      t('helpStep1'),
+      t('helpStep2'),
+      t('helpStep3'),
+      t('helpStep4'),
+      t('helpStep5'),
     ]);
   });
 
@@ -555,8 +556,8 @@ function toggleHelpTooltip(btnEl, items) {
   const tooltip = document.getElementById('help-tooltip');
   if (!tooltip.hidden) { tooltip.hidden = true; return; }
 
-  document.getElementById('help-tooltip-list').innerHTML = items.map(t => `<li>${t}</li>`).join('');
-  tooltip.querySelector('.help-tooltip-title').textContent = 'How to use this window';
+  document.getElementById('help-tooltip-list').innerHTML = items.map(item => `<li>${item}</li>`).join('');
+  tooltip.querySelector('.help-tooltip-title').textContent = t('helpTitle');
 
   // Reveal off-screen first to measure
   tooltip.style.visibility = 'hidden';
@@ -587,14 +588,14 @@ function renderSavedPanel(type) {
   const listEl = document.getElementById(isLoved ? 'loved-list' : 'starred-list');
 
   if (set.size === 0) {
-    listEl.innerHTML = `<p class="saved-empty">${isLoved ? '❤️' : '⭐'} No ${isLoved ? 'loved' : 'starred'} spots yet.<br><small>Run an analysis and heart/star spots you like!</small></p>`;
+    listEl.innerHTML = `<p class="saved-empty">${isLoved ? t('noLovedYet') : t('noStarredYet')}<br><small>${t('emptyHint')}</small></p>`;
     return;
   }
 
   // Find matching viewpoints from current results
   const matched = state.results.filter(vp => set.has(makeSpotId(vp)));
   if (matched.length === 0) {
-    listEl.innerHTML = `<p class="saved-empty">Your ${isLoved ? 'loved' : 'starred'} spots are from a previous session.<br><small>Re-analyze the area to see them on the map.</small></p>`;
+    listEl.innerHTML = `<p class="saved-empty">${isLoved ? t('lovedPrevSession') : t('starredPrevSession')}<br><small>${t('reanalyzeHint')}</small></p>`;
     return;
   }
 
@@ -609,10 +610,10 @@ function renderSavedPanel(type) {
         <span class="result-coords">${vp.lat.toFixed(4)}°N, ${vp.lng.toFixed(4)}°E</span>
       </div>
       <div class="result-stats">
-        <span class="result-stat">Elev: <strong>${Math.round(vp.elevation)}m</strong></span>
-        <span class="result-stat">Slope: <strong>${vp.slope.toFixed(1)}°</strong></span>
-        <span class="result-stat">Peak: <strong>${Math.round(vp.peakElevation)}m</strong></span>
-        <span class="result-stat">Valley: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
+        <span class="result-stat">${t('elev')}: <strong>${Math.round(vp.elevation)}m</strong></span>
+        <span class="result-stat">${t('slope')}: <strong>${vp.slope.toFixed(1)}°</strong></span>
+        <span class="result-stat">${t('peak')}: <strong>${Math.round(vp.peakElevation)}m</strong></span>
+        <span class="result-stat">${t('valley')}: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
       </div>
     `;
     card.addEventListener('click', () => {
@@ -639,7 +640,7 @@ function initMaximize(winId, btnId) {
       win.style.height = savedLayout.height + 'px';
       savedLayout = null;
       btn.innerHTML = MAXIMIZE_SVG;
-      btn.title = 'Maximize';
+      btn.title = t('maximize');
     } else {
       const rect = win.getBoundingClientRect();
       savedLayout = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
@@ -648,7 +649,7 @@ function initMaximize(winId, btnId) {
       win.style.width  = window.innerWidth  + 'px';
       win.style.height = window.innerHeight + 'px';
       btn.innerHTML = RESTORE_SVG;
-      btn.title = 'Restore';
+      btn.title = t('restore');
     }
     win.classList.add('win-maximizing');
     let rafId;
@@ -888,16 +889,16 @@ function countTilesForBounds(bounds) {
 function validateSelection(bounds) {
   if (!bounds) {
     analyzeBtnEl.disabled = true;
-    analyzeBtnTextEl.textContent = 'Analyze Area';
+    analyzeBtnTextEl.textContent = t('analyzeArea');
     return;
   }
   const tiles = countTilesForBounds(bounds);
   if (tiles > MAX_TILES) {
     analyzeBtnEl.disabled = true;
-    analyzeBtnTextEl.textContent = `Area too large (${tiles} tiles, max ${MAX_TILES})`;
+    analyzeBtnTextEl.textContent = t('areaTooLarge', {n: tiles, max: MAX_TILES});
   } else {
     analyzeBtnEl.disabled = false;
-    analyzeBtnTextEl.textContent = 'Analyze Area';
+    analyzeBtnTextEl.textContent = t('analyzeArea');
   }
 }
 
@@ -996,18 +997,18 @@ async function fetchElevationGrid(bounds, zoom) {
           loaded++;
           if (rect) rect.setStyle({ dashArray: null, color: '#09ACE2', weight: 1.5 });
           updateProgress(
-            'Fetching elevation tiles...',
+            t('fetchingTiles'),
             (loaded / totalTiles) * 50,
-            `${loaded} / ${totalTiles} tiles`
+            t('tileProgress', {loaded: loaded, total: totalTiles})
           );
         })
         .catch(() => {
           loaded++;
           if (rect) rect.setStyle({ color: '#ef4444', fillOpacity: 0.05 });
           updateProgress(
-            'Fetching elevation tiles...',
+            t('fetchingTiles'),
             (loaded / totalTiles) * 50,
-            `${loaded} / ${totalTiles} tiles`
+            t('tileProgress', {loaded: loaded, total: totalTiles})
           );
         });
       promises.push(promise);
@@ -1017,7 +1018,7 @@ async function fetchElevationGrid(bounds, zoom) {
   await Promise.all(promises);
 
   // Decode all pixels
-  updateProgress('Decoding elevation data...', 55);
+  updateProgress(t('decodingElevation'), 55);
   const imageData = ctx.getImageData(0, 0, width, height);
   const pixels = imageData.data;
 
@@ -1054,7 +1055,7 @@ async function startAnalysis() {
 
   const analyzeBtn = document.getElementById('analyze-btn');
   analyzeBtn.disabled = true;
-  showProgress('Starting analysis...');
+  showProgress(t('startingAnalysis'));
   document.dispatchEvent(new CustomEvent('wt:analysis-start'));
 
   try {
@@ -1085,7 +1086,7 @@ async function startAnalysis() {
     document.getElementById('clear-btn').hidden = false;
   } catch (err) {
     hideProgress();
-    alert('Analysis failed: ' + err.message);
+    alert(t('analysisFailed') + err.message);
     console.error(err);
   } finally {
     analyzeBtn.disabled = false;
@@ -1101,7 +1102,9 @@ function runWorkerAnalysis(grid, params) {
     state.worker.onmessage = (e) => {
       const msg = e.data;
       if (msg.type === 'progress') {
-        updateProgress(msg.text, 60 + msg.percent * 0.4, msg.detail);
+        const text = t(msg.key, msg.params);
+        const detail = msg.detailKey ? t(msg.detailKey, msg.params) : '';
+        updateProgress(text, 60 + msg.percent * 0.4, detail);
       } else if (msg.type === 'result') {
         resolve(msg.viewpoints);
       } else if (msg.type === 'error') {
@@ -1150,7 +1153,7 @@ function displayResults(viewpoints) {
   if (viewpoints.length === 0) {
     document.getElementById('results-count').textContent = '0';
     document.getElementById('results-list').innerHTML =
-      '<p style="padding:16px;color:var(--text-muted);text-align:center;">No viewpoints matched your criteria. Try adjusting the filters or selecting a different area.</p>';
+      `<p style="padding:16px;color:var(--text-muted);text-align:center;">${t('noResults')}</p>`;
     document.getElementById('results-panel').hidden = false;
     return;
   }
@@ -1234,12 +1237,7 @@ function displayResults(viewpoints) {
 
     // Result card
     const compassDir = bearingToCompass(bearing);
-    const searchLat = vp.lat.toString().replace(/\./g, '%2e');
-    const searchLng = vp.lng.toString().replace(/\./g, '%2e');
-    // Add 50m to altitude to simulate a drone-height view and prevent the camera from spawning underground on steep slopes.
-    // Decrease pullback distance from 400d to 100d so it stays closer to the view point.
-    const geUrl = `https://earth.google.com/web/search/${searchLat},${searchLng}/@${vp.lat},${vp.lng},${vp.elevation + 50}a,100d,35y,${Math.round(vp.viewBearing || 0)}h,85t,0r`;
-    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${vp.lat},${vp.lng}`;
+    const { geUrl, mapsUrl } = buildViewpointUrls(vp);
 
     const card = document.createElement('div');
     card.className = 'result-card';
@@ -1247,27 +1245,27 @@ function displayResults(viewpoints) {
     card.innerHTML = `
       <div class="result-card-header">
         <span class="result-score" style="color:${scoreColor}">${Math.round(vp.score)}</span>
-        <span class="result-bearing" title="View direction">
+        <span class="result-bearing" title="${t('viewDirection')}">
           <span class="bearing-arrow" style="transform:rotate(${bearing}deg)">↑</span>
           ${compassDir}
         </span>
         <span class="result-coords">${vp.lat.toFixed(4)}°N, ${vp.lng.toFixed(4)}°E</span>
       </div>
       <div class="result-stats">
-        <span class="result-stat">Elev: <strong>${Math.round(vp.elevation)}m</strong></span>
-        <span class="result-stat">Slope: <strong>${vp.slope.toFixed(1)}°</strong></span>
-        <span class="result-stat">Peak: <strong>${Math.round(vp.peakElevation)}m</strong></span>
-        <span class="result-stat">Valley: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
+        <span class="result-stat">${t('elev')}: <strong>${Math.round(vp.elevation)}m</strong></span>
+        <span class="result-stat">${t('slope')}: <strong>${vp.slope.toFixed(1)}°</strong></span>
+        <span class="result-stat">${t('peak')}: <strong>${Math.round(vp.peakElevation)}m</strong></span>
+        <span class="result-stat">${t('valley')}: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
       </div>
       <div class="result-actions">
-        <button class="action-btn like-btn ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="Love this spot">
+        <button class="action-btn like-btn ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="${t('loveThisSpot')}">
           ${state.likedSpots.has(vpId) ? '❤️' : '🤍'}
         </button>
-        <button class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="Star this spot">
+        <button class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="${t('starThisSpot')}">
           ${state.starredSpots.has(vpId) ? '⭐' : '☆'}
         </button>
-        <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener" title="Get Directions to Spot">🗺️</a>
-        <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener" title="Scenic 3D View (No Pin)">🌍</a>
+        <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener" title="${t('getDirections')}">🗺️</a>
+        <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener" title="${t('scenic3dView')}">🌍</a>
       </div>
     `;
     // Navigate on card body click (not buttons)
@@ -1300,56 +1298,65 @@ function displayResults(viewpoints) {
   }
 }
 
+// Build Google Earth 3D scene and Maps directions URLs for a viewpoint.
+// +50m altitude prevents the camera from spawning underground on steep slopes.
+function buildViewpointUrls(vp) {
+  const searchLat = vp.lat.toString().replace(/\./g, '%2e');
+  const searchLng = vp.lng.toString().replace(/\./g, '%2e');
+  const bearingDeg = Math.round(vp.viewBearing || 0);
+  return {
+    geUrl: `https://earth.google.com/web/search/${searchLat},${searchLng}/@${vp.lat},${vp.lng},${vp.elevation + 50}a,100d,35y,${bearingDeg}h,85t,0r`,
+    mapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${vp.lat},${vp.lng}`,
+  };
+}
+
 function createPopupContent(vp, index, vpId) {
   const scoreColor = getScoreColor(vp.score);
   const compass = bearingToCompass(vp.viewBearing || 0);
   const bearingDeg = Math.round(vp.viewBearing || 0);
-  const searchLat = vp.lat.toString().replace(/\./g, '%2e');
-  const searchLng = vp.lng.toString().replace(/\./g, '%2e');
-  const geUrl = `https://earth.google.com/web/search/${searchLat},${searchLng}/@${vp.lat},${vp.lng},${vp.elevation + 50}a,100d,35y,${bearingDeg}h,85t,0r`;
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${vp.lat},${vp.lng}`;
+  const { geUrl, mapsUrl } = buildViewpointUrls(vp);
 
   return `
-    <div class="popup-title" style="color:${scoreColor}">Viewpoint #${index + 1} — Score: ${Math.round(vp.score)}</div>
+    <div class="popup-title" style="color:${scoreColor}">${t('viewpointTitle', {n: index + 1, score: Math.round(vp.score)})}</div>
     <div class="popup-bearing">
       <span class="popup-bearing-arrow" style="transform:rotate(${bearingDeg}deg)">↑</span>
-      View Direction: <strong>${compass} (${bearingDeg}°)</strong>
+      ${t('viewDirectionLabel')} <strong>${compass} (${bearingDeg}°)</strong>
     </div>
     <div class="popup-grid">
       <div>
-        <div class="popup-stat-label">Elevation</div>
+        <div class="popup-stat-label">${t('elevation')}</div>
         <div class="popup-stat-value">${Math.round(vp.elevation)}m</div>
       </div>
       <div>
-        <div class="popup-stat-label">Slope</div>
+        <div class="popup-stat-label">${t('slopeLabel')}</div>
         <div class="popup-stat-value">${vp.slope.toFixed(1)}°</div>
       </div>
       <div>
-        <div class="popup-stat-label">Nearest Peak</div>
+        <div class="popup-stat-label">${t('nearestPeak')}</div>
         <div class="popup-stat-value">${Math.round(vp.peakElevation)}m</div>
       </div>
       <div>
-        <div class="popup-stat-label">Valley Depth</div>
+        <div class="popup-stat-label">${t('valleyDepthLabel')}</div>
         <div class="popup-stat-value">${Math.round(vp.valleyDepth)}m</div>
       </div>
       <div>
-        <div class="popup-stat-label">Peak Distance</div>
+        <div class="popup-stat-label">${t('peakDistance')}</div>
         <div class="popup-stat-value">${(vp.peakDistance / 1000).toFixed(1)} km</div>
       </div>
       <div>
-        <div class="popup-stat-label">Prominence</div>
+        <div class="popup-stat-label">${t('prominence')}</div>
         <div class="popup-stat-value">${Math.round(vp.peakProminence)}m</div>
       </div>
     </div>
     <div class="popup-actions">
       <button class="action-btn like-btn popup-like ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
-        ${state.likedSpots.has(vpId) ? '❤️' : '🤍'} Love
+        ${state.likedSpots.has(vpId) ? '❤️' : '🤍'} ${t('love')}
       </button>
       <button class="action-btn star-btn popup-star ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
-        ${state.starredSpots.has(vpId) ? '⭐' : '☆'} Star
+        ${state.starredSpots.has(vpId) ? '⭐' : '☆'} ${t('star')}
       </button>
-      <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener">🗺️ Maps</a>
-      <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener">🌍 3D Scene</a>
+      <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener">🗺️ ${t('maps')}</a>
+      <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener">🌍 ${t('scene3d')}</a>
     </div>
   `;
 }
@@ -1448,7 +1455,7 @@ function createClusterIcon(cluster) {
   return L.divIcon({
     html: `<div class="cluster-icon" style="background:${color};width:${size}px;height:${size}px;">
              <span class="cluster-score">${Math.round(avgScore)}</span>
-             <span class="cluster-count">${count} views</span>
+             <span class="cluster-count">${t('clusterViews', {n: count})}</span>
            </div>`,
     className: 'viewpoint-cluster',
     iconSize: L.point(size, size),

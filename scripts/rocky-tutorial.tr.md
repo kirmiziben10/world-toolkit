@@ -5,17 +5,17 @@
 ## Adım 1: Uygulamayı aç
 <!-- target: #icon-search-spots -->
 <!-- target-mobile: #icon-search-spots -->
-<!-- wait: dblclick #icon-search-spots -->
+<!-- wait: visible #main-window:not([hidden]) -->
 <!-- arm: right -->
-> {color:cyan}Hoş geldin!{/color} Keşfetmeye başlamak için bu ikona çift tıkla!
+> {color:cyan}Hoş geldin!{/color} Bu uygulama gerçek yükseklik verileriyle dağ manzaralı muhteşem seyir noktalarını buluyor — haritadan bir alan seç, ben de araziyi analiz edeyim! Başlamak için bu ikona {bold}çift tıkla{/bold}!
 
-<!-- timeout: 10 -->
-> Hâlâ burada mısın? Sadece o ikona {bold}çift tıkla{/bold}!
+<!-- timeout: 15 -->
+> O ikona {bold}çift tıkla{/bold} ve birlikte harika yerler keşfedelim!
 
-<!-- timeout: 25 -->
+<!-- timeout: 30 -->
 > Hadi, bir dene! Doğrudan orayı işaret ediyorum!
 
-<!-- timeout: 45 -->
+<!-- timeout: 50 -->
 > {shake}Gerekirse bütün gün beklerim!{/shake}
 
 ## Adım 2: Dikdörtgen çiz

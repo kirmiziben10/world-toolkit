@@ -36,7 +36,8 @@ User draws rectangle on Leaflet map
   → Results sent back as viewpoint array (includes peakLat, peakLng, viewBearing)
   → app.js clips results to selection bounds (selectionBounds.contains)
   → app.js renders directional SVG markers (score + bearing wedge),
-    view-line polylines on popup open, and compass bearing labels
+    view-line polylines on popup open, compass bearing labels,
+    Google Earth 3D scene links, and Google Maps directions links
 ```
 
 ### Files
@@ -85,6 +86,7 @@ User draws rectangle on Leaflet map
 - **Label**: `#globe-label` div inserted after `#earth-globe`. Clicking it fires `globe-navigate` → `map.flyTo`. Hidden during drag/showcase
 - **Edge shine**: CSS `#earth-globe::after` with inset box-shadows (blue atmosphere + dark shadow + bright top-left highlight)
 - **DOM refs**: `analyzeBtnEl`, `analyzeBtnTextEl`, `undoBtnEl`, `redoBtnEl` cached in `init()` — not queried on every event
+- **GlobeAPI**: `window.GlobeAPI = { spin(vx, vy) }` exposed at init for programmatic spin control. Adds velocity and clears pin/settled/showcase state (guarded to only reset when state actually needs clearing)
 
 ### Controls Panel Toggle
 
@@ -101,13 +103,18 @@ An animated 3D character (Three.js) embedded as a desktop pet. Source project li
 - **`buddy-integration.js`** — Glue code. Initializes the buddy, wires world-toolkit CustomEvents to buddy reactions, manages cooldown, idle tips, and desktop icon toggle. This is the only file to edit for changing how Rocky interacts with world-toolkit.
 - **`vendor/desktop-buddy/desktop-buddy.iife.js`** — Pre-built IIFE bundle. Do NOT edit directly — rebuild from `../desktop-buddy/` with `pnpm build`, then copy `dist/desktop-buddy.iife.js` here.
 - **`Models/`** — OBJ model files at project root (fetched as `Models/Head.obj` etc. relative to page origin). Copied from `../desktop-buddy/dist/Models/`.
-- **`scripts/rocky-terrain.md`** — Dialogue script (markdown format with HTML comment directives). Edit this to change what Rocky says. Format documented in `../desktop-buddy/CLAUDE.md` under "Scripting system".
+- **`scripts/rocky-terrain.{en,tr}.md`** — Dialogue scripts per language (markdown format with HTML comment directives). Edit these to change what Rocky says. Format documented in `../desktop-buddy/CLAUDE.md` under "Scripting system".
+- **`scripts/rocky-tutorial.{en,tr}.md`** — Tutorial dialogue scripts per language.
 
 **Event bridge (app.js → buddy-integration.js):**
 - `wt:analysis-start` — dispatched when terrain analysis begins
 - `wt:results` — dispatched after `displayResults()`, detail: `{ count }`
 - `wt:like` — dispatched after `toggleLike()`, detail: `{ added: boolean }`
 - `wt:star` — dispatched after `toggleStar()`, detail: `{ added: boolean }`
+
+**Event bridge (buddy scripts → buddy-integration.js):**
+- `buddy:trigger` with `detail: 'spin-globe'` — triggers the globe spin orchestration
+- `buddy:trigger` with `detail: 'lang-en'` / `'lang-tr'` — switches language and reinits buddy
 
 These are `CustomEvent`s on `document`. To add new buddy reactions: dispatch a new `wt:` event in `app.js`, listen for it in `buddy-integration.js`.
 
@@ -117,6 +124,18 @@ These are `CustomEvent`s on `document`. To add new buddy reactions: dispatch a n
 - 8-second cooldown between reactions to avoid spamming dialogue
 - Visibility toggled via double-click on the Rocky desktop icon; persisted in `localStorage` (`sv_buddy_visible`)
 - The IIFE bundle hardcodes model paths as `Models/*.obj` relative to page origin — do not move the `Models/` directory without updating the bundle
+
+**Multi-language support:**
+- Language resolved by `getCurrentLang()` in `buddy-integration.js` (also exposed as `window.getCurrentLang` for use by `tutorial.js`)
+- Resolution order: `localStorage('sv_buddy_lang')` → `navigator.language` prefix → default `'en'`
+- Supported languages: `en`, `tr`. Scripts live at `scripts/rocky-terrain.{lang}.md` and `scripts/rocky-tutorial.{lang}.md`
+- Language switch via `buddy:trigger` event destroys and reinits the buddy after 1s delay
+
+**Globe spin orchestration:**
+- `orchestrateGlobeSpin()` walks Rocky to 80px from the globe edge, starts an orbit animation, then spins the globe via `window.GlobeAPI.spin(vx, vy)` for 3 seconds
+- `window.GlobeAPI` is exposed by `globe.js` at init — `spin(vx, vy)` adds velocity impulses and clears settled/showcase state
+- Re-entrancy guarded by module-level `spinCheckInterval`/`spinAnimInterval` refs — a second call while spinning is a no-op
+- Idle timer has 25% chance to trigger a globe spin instead of showing a tip
 
 **Rebuilding the buddy bundle:**
 ```bash

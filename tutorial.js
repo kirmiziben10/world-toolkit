@@ -343,7 +343,7 @@
     currentStep = -1;
     localStorage.setItem(STORAGE_KEY, 'true');
     if (buddyRef) {
-      buddyRef.controller.say('{rainbow}Tutorial complete!{/rainbow} You\'re ready to find amazing viewpoints!');
+      buddyRef.controller.say(window.i18n ? window.i18n.t('tutorialComplete') : '{rainbow}Tutorial complete!{/rainbow} You\'re ready to find amazing viewpoints!');
     }
     document.dispatchEvent(new CustomEvent('wt:tutorial-done'));
   }
@@ -357,11 +357,7 @@
     buddyRef = buddy;
     active = true;
 
-    var lang = localStorage.getItem('sv_buddy_lang');
-    if (!lang && navigator.language) {
-      lang = navigator.language.split('-')[0];
-    }
-    var activeLang = lang === 'tr' ? 'tr' : 'en';
+    var activeLang = window.getCurrentLang ? window.getCurrentLang() : 'en';
     var scriptUrl = 'scripts/rocky-tutorial.' + activeLang + '.md';
 
     fetch(scriptUrl)

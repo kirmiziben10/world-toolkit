@@ -136,7 +136,7 @@
     try {
       const resp = await fetch(
         'https://nominatim.openstreetmap.org/reverse?lat=' + lat.toFixed(3) +
-        '&lon=' + lng.toFixed(3) + '&format=json&zoom=5&accept-language=en',
+        '&lon=' + lng.toFixed(3) + '&format=json&zoom=5&accept-language=' + (window.i18n ? window.i18n.getLang() : 'en'),
         { headers: { 'User-Agent': 'WorldToolkit/1.0' } }
       );
       const data = await resp.json();
@@ -359,14 +359,16 @@
       spin: function(vx, vy) {
         velX += vx;
         velY += vy;
-        settled = false;
-        showcasing = false;
-        pinLat = null;
-        pinLng = null;
-        pinSurface = null;
-        clearTimeout(showcaseTimer);
-        clearTimeout(geocodeTimer);
-        if (labelEl) labelEl.hidden = true;
+        if (settled || showcasing || pinLat !== null) {
+          settled = false;
+          showcasing = false;
+          pinLat = null;
+          pinLng = null;
+          pinSurface = null;
+          clearTimeout(showcaseTimer);
+          clearTimeout(geocodeTimer);
+          if (labelEl) labelEl.hidden = true;
+        }
       }
     };
 

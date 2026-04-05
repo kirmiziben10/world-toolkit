@@ -25,15 +25,18 @@
     var IDLE_TIMEOUT = 60000; // 60s
 
     // --- Idle tips ---
-    var idleTips = [
-      '{color:cyan}Pro tip:{/color} Zoom in closer on the map for {bold}more precise{/bold} viewpoint locations!',
-      'Did you know? {bold}Valley depth{/bold} is the single most important factor in the {rainbow}scenic score{/rainbow}!',
-      '{color:green}Camping tip:{/color} Look for spots with slopes under {bold}10 degrees{/bold} — your back will thank you!',
-      'The {bold}globe{/bold} on the left is interactive! Spin it to explore {rainbow}the world{/rainbow}!',
-      '{shake}Fun fact:{/shake} The terrain data comes from open elevation tiles at {bold}~58m resolution{/bold}!',
-      'Try using the {color:cyan}Closeness{/color} slider to find viewpoints {bold}nearer{/bold} to dramatic peaks!',
-      '{bold}Peak prominence{/bold} measures how much a mountain stands out — higher is more {rainbow}dramatic{/rainbow}!',
-    ];
+    function getIdleTips() {
+      var t = window.i18n.t;
+      return [
+        t('tipZoom'),
+        t('tipValley'),
+        t('tipCamping'),
+        t('tipGlobe'),
+        t('tipTerrain'),
+        t('tipCloseness'),
+        t('tipProminence'),
+      ];
+    }
 
     function getCurrentLang() {
       var lang = localStorage.getItem('sv_buddy_lang');
@@ -42,6 +45,7 @@
       }
       return lang === 'tr' ? 'tr' : 'en';
     }
+    window.getCurrentLang = getCurrentLang;
 
     // --- Init ---
     function initBuddy() {
@@ -93,7 +97,8 @@
           if (Math.random() < 0.25) {
             orchestrateGlobeSpin();
           } else {
-            var tip = idleTips[Math.floor(Math.random() * idleTips.length)];
+            var tips = getIdleTips();
+            var tip = tips[Math.floor(Math.random() * tips.length)];
             reactWithCooldown(tip);
           }
           lastActivityTime = Date.now(); // reset so next tip waits another 60s
@@ -109,59 +114,64 @@
     }
 
     // --- Globe Spin Orchestration ---
+    var spinCheckInterval = null;
+    var spinAnimInterval = null;
+
     function orchestrateGlobeSpin() {
       if (!buddy) return;
+      if (spinCheckInterval || spinAnimInterval) return; // already running
       var globe = document.getElementById('earth-globe');
       if (!globe) return;
-      
+
       var rect = globe.getBoundingClientRect();
       var cx = rect.left + rect.width / 2;
       var cy = rect.top + rect.height / 2;
       var radius = rect.width / 2;
-      
+
       var bounds = buddy.controller.getScreenBounds();
       var bx = bounds.x + bounds.width / 2;
       var by = bounds.y + bounds.height / 2;
-      
+
       // Ray-march 80px away from the globe's edge
       var dx = cx - bx;
       var dy = buddy.controller.mode === 'full' ? 0 : cy - by;
       var distToCenter = Math.sqrt(dx * dx + dy * dy);
-      
+
       if (distToCenter === 0) { dx = 1; distToCenter = 1; }
-      
+
       var nx = dx / distToCenter;
       var ny = dy / distToCenter;
-      
+
       var targetX = cx - nx * (radius + 80);
       var targetY = cy - ny * (radius + 80);
-      
+
       // Send Rocky directly to the exact calculated 80px standoff point
       buddy.controller.walkTo(targetX, targetY);
-      
-      var checkInterval = setInterval(function() {
+
+      spinCheckInterval = setInterval(function() {
         if (!buddy || buddy.controller.drag.isDragging) {
-          clearInterval(checkInterval);
+          clearInterval(spinCheckInterval);
+          spinCheckInterval = null;
           return;
         }
-        
-        // Buddy internally nulls walkTarget when he arrives at targetX/Y 
+
+        // Buddy internally nulls walkTarget when he arrives at targetX/Y
         if (buddy.controller.walkTarget == null) {
-          clearInterval(checkInterval);
-          
+          clearInterval(spinCheckInterval);
+          spinCheckInterval = null;
+
           buddy.controller.orbitGlobe(cx, cy, 'right');
-          
+
           var spinTime = 0;
-          var spinInterval = setInterval(function() {
+          spinAnimInterval = setInterval(function() {
             if (window.GlobeAPI) {
-              // vy is horizontal spin (longitude), vx is vertical (latitude)
-              window.GlobeAPI.spin(0, -0.04); 
+              window.GlobeAPI.spin(0, -0.04);
             }
             spinTime += 50;
             if (spinTime >= 3000) {
-              clearInterval(spinInterval);
+              clearInterval(spinAnimInterval);
+              spinAnimInterval = null;
               if (window.GlobeAPI) {
-                 // Impart a final random vertical and horizontal impulse so it lands somewhere fresh
                  window.GlobeAPI.spin((Math.random() - 0.5) * 0.3, -0.15);
               }
               if (buddy) buddy.controller.stopPointing();
@@ -223,9 +233,11 @@
         orchestrateGlobeSpin();
       } else if (e.detail === 'lang-en') {
         localStorage.setItem('sv_buddy_lang', 'en');
+        if (window.i18n) window.i18n.translatePage();
         setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
       } else if (e.detail === 'lang-tr') {
         localStorage.setItem('sv_buddy_lang', 'tr');
+        if (window.i18n) window.i18n.translatePage();
         setTimeout(function() { destroyBuddy(); initBuddy(); }, 1000);
       }
     });
