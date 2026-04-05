@@ -1490,6 +1490,43 @@ a.action-btn {
   line-height: 1.4;
 }
 
+/* ===== Recycle Bin Menu ===== */
+.recycle-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  padding: 4px 0;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.recycle-menu[hidden] { display: none; }
+.recycle-menu-item {
+  background: none;
+  border: none;
+  padding: 7px 16px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-dark);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.recycle-menu-item:hover {
+  background: rgba(100, 160, 255, 0.25);
+}
+.recycle-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.recycle-menu-item:disabled:hover {
+  background: none;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 900px) and (min-width: 601px) {
   #main-window {

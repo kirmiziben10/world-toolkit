@@ -384,10 +384,57 @@ function initSliders() {
 function initButtons() {
   document.getElementById('analyze-btn').addEventListener('click', startAnalysis);
 
-  document.getElementById('clear-btn').addEventListener('click', () => {
+  // Recycle Bin icon — show menu
+  const recycleBin = document.getElementById('icon-recycle-bin');
+  const recycleMenu = document.getElementById('recycle-menu');
+
+  recycleBin.addEventListener('click', (e) => {
+    iconPop(recycleBin);
+    if (!recycleMenu.hidden) { recycleMenu.hidden = true; return; }
+    // Position menu near the icon
+    const rect = recycleBin.getBoundingClientRect();
+    recycleMenu.style.left = (rect.right + 4) + 'px';
+    recycleMenu.style.top = rect.top + 'px';
+    // Enable/disable items based on state
+    document.getElementById('recycle-clear-all').disabled =
+      state.resultMarkers.length === 0 && !state.selectionBounds;
+    document.getElementById('recycle-clear-selection').disabled = !state.selectionBounds;
+    recycleMenu.hidden = false;
+  });
+
+  // Dismiss menu on outside click
+  document.addEventListener('click', (e) => {
+    if (!recycleMenu.hidden && !recycleMenu.contains(e.target) && !recycleBin.contains(e.target)) {
+      recycleMenu.hidden = true;
+    }
+  });
+
+  // Clear All — remove results + selection
+  document.getElementById('recycle-clear-all').addEventListener('click', () => {
+    recycleMenu.hidden = true;
     clearResults();
-    document.getElementById('clear-btn').hidden = true;
     document.getElementById('results-panel').hidden = true;
+    // Also clear selection
+    state.drawnItems.clearLayers();
+    state.selectionBounds = null;
+    state.boundsHistory = [null];
+    state.historyIndex = 0;
+    validateSelection(null);
+    updateUndoRedoButtons();
+  });
+
+  // Clear Selection — remove rectangle but keep result points
+  document.getElementById('recycle-clear-selection').addEventListener('click', () => {
+    recycleMenu.hidden = true;
+    state.drawnItems.clearLayers();
+    state.selectionBounds = null;
+    state.boundsHistory = [null];
+    state.historyIndex = 0;
+    validateSelection(null);
+    updateUndoRedoButtons();
+    // Remove tile boundaries but keep result markers
+    state.tileBoundaries.forEach((layer) => state.map.removeLayer(layer));
+    state.tileBoundaries = [];
   });
 
   document.getElementById('close-results').addEventListener('click', () => {
@@ -1134,7 +1181,6 @@ async function startAnalysis() {
     hideProgress();
     displayResults(results);
     document.dispatchEvent(new CustomEvent('wt:results', { detail: { count: results.length } }));
-    document.getElementById('clear-btn').hidden = false;
   } catch (err) {
     hideProgress();
     alert(t('analysisFailed') + err.message);

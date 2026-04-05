@@ -41,6 +41,16 @@
       <img src="assets/rocky_icon.svg" alt="Rocky" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="rocky">Rocky</span>
     </div>
+    <div class="desktop-icon" id="icon-recycle-bin" title="Recycle Bin" data-i18n-attr="title:recycleBin">
+      <img src="assets/Bin closed.svg" alt="Recycle Bin" class="desktop-icon-img">
+      <span class="desktop-icon-label" data-i18n="recycleBin">Recycle Bin</span>
+    </div>
+  </div>
+
+  <!-- Recycle Bin context menu -->
+  <div id="recycle-menu" class="recycle-menu" hidden>
+    <button class="recycle-menu-item" id="recycle-clear-all" data-i18n="clearAll">Clear All</button>
+    <button class="recycle-menu-item" id="recycle-clear-selection" data-i18n="clearSelection">Clear Selection</button>
   </div>
 
   <!-- Search Bar (Win7 style) -->
@@ -167,9 +177,6 @@
             <span class="btn-text" data-i18n="analyzeArea">Analyze Area</span>
           </button>
 
-          <button id="clear-btn" class="xp-secondary-btn" hidden data-i18n="clearResults">
-            Clear Results
-          </button>
         </div>
       </aside>
 
