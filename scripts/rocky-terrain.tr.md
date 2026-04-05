@@ -17,7 +17,7 @@
 # Responses
 <!-- responses -->
 
-<!-- group: Sohbet (Chat) -->
+<!-- group: Sohbet -->
 
 ## Greeting
 <!-- keywords: merhaba, selam, hey, selamlar, naber, yo -->
@@ -36,7 +36,7 @@
 <!-- keywords: his, nasıl, nasılsın, mod -->
 > {rainbow}Harika hissediyorum{/rainbow}! Güzel bir {shake}arazi analizi{/shake} gününden daha iyi bir şey yok!
 
-<!-- group: Rehber (Guide) -->
+<!-- group: Rehber -->
 
 ## Help
 <!-- keywords: yardım, komutlar, ne yapabilirsin, nasıl -->
@@ -62,7 +62,7 @@
 <!-- keywords: ipucu, tavsiye, öner, tavsiye et -->
 > En önemli ipucum: Önce {bold}küçük bir alanla{/bold} başla, daha fazla seçenek istiyorsan sonra {color:green}aramanı genişlet{/color}!
 
-<!-- group: Arazi (Terrain) -->
+<!-- group: Arazi -->
 
 ## Elevation
 <!-- keywords: rakım, yükseklik, irtifa, yüksek, uzun -->
@@ -92,7 +92,7 @@
 <!-- keywords: yürüyüş, doğa yürüyüşü, yürü, gezi, parkur -->
 > Birine her zaman {bold}rotanı{/bold} söyle! Ve yanına {color:cyan}fazladan su{/color} al — dağlar insanı {shake}çok susatır{/shake}!
 
-<!-- group: Emotelar (Emotes) -->
+<!-- group: Emotelar -->
 
 ## Spin Globe
 <!-- keywords: çevir, küre, küreyi çevir, vur -->
@@ -119,7 +119,7 @@
 > Kayalar dans etmez, ama {rainbow}tarzla{/rainbow} {shake}yuvarlanırlar{/shake}!
 <!-- trigger: fly -->
 
-<!-- group: Diller (Language) -->
+<!-- group: Diller -->
 
 ## English
 <!-- keywords: english, en, ingilizce -->
