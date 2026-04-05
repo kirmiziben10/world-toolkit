@@ -46,6 +46,8 @@
           target: null,
           targetMobile: null,
           wait: null,
+          mobileOnly: false,
+          desktopOnly: false,
           arm: 'right',
           dialogue: null,
           reminders: [],
@@ -63,6 +65,8 @@
         if (key === 'target') step.target = val;
         else if (key === 'target-mobile') step.targetMobile = val;
         else if (key === 'wait') step.wait = parseWait(val);
+        else if (key === 'mobile-only') step.mobileOnly = val === 'true';
+        else if (key === 'desktop-only') step.desktopOnly = val === 'true';
         else if (key === 'arm') step.arm = val;
         else if (key === 'timeout') {
           // Next dialogue line(s) are reminders at this timeout
@@ -230,7 +234,17 @@
   // Step Execution
   // ==============================
 
+  function shouldRunStep(step) {
+    if (step.mobileOnly && !isMobile) return false;
+    if (step.desktopOnly && isMobile) return false;
+    return true;
+  }
+
   function runStep(index) {
+    while (index < steps.length && !shouldRunStep(steps[index])) {
+      index++;
+    }
+
     if (index >= steps.length) {
       completeTutorial();
       return;

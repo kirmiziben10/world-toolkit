@@ -32,6 +32,16 @@
 > Herhangi bir yere bir dikdörtgen çizmen yeterli — daha sonra her zaman baştan yapabilirsin!
 
 ## Adım 3: Analiz et
+<!-- mobile-only: true -->
+<!-- target-mobile: #controls-toggle -->
+<!-- wait: click #controls-toggle -->
+<!-- arm: left -->
+> {bold}Mobilde{/bold}, önce filtre panelini aç ki Analiz Et düğmesine rahatça ulaşabilesin.
+
+<!-- timeout: 12 -->
+> Filtreleri dışarı kaydırmak için bu oka dokun.
+
+## Adım 4: Analiz et
 <!-- target: #analyze-btn -->
 <!-- target-mobile: #analyze-btn -->
 <!-- wait: click #analyze-btn -->
@@ -41,9 +51,19 @@
 <!-- timeout: 10 -->
 > Şuradaki büyük düğme — ona bir kez tıkla!
 
-## Adım 4: Sonuçları gör
+## Adım 5: Sonuçları gör
 <!-- target: .result-card -->
 <!-- target-mobile: .result-card -->
 <!-- wait: visible .result-card -->
 <!-- arm: right -->
 > {rainbow}Güzel!{/rainbow} Bunlar senin manzara noktaların! Haritada görmek için herhangi bir karta tıkla!
+
+## Adım 6: Filtreleri kapat
+<!-- mobile-only: true -->
+<!-- target-mobile: #controls-toggle -->
+<!-- wait: click #controls-toggle -->
+<!-- arm: left -->
+> Son bir mobil ipucu: sonuçlara daha rahat bakmak için bu oka tekrar dokun ve {bold}filtreleri kapat{/bold}.
+
+<!-- timeout: 12 -->
+> Paneli geri gizle ki harita ve sonuç listesi daha geniş görünsün.

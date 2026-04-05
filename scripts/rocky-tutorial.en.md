@@ -32,6 +32,16 @@
 > Just draw a rectangle anywhere — you can always redo it!
 
 ## Step 3: Analyze
+<!-- mobile-only: true -->
+<!-- target-mobile: #controls-toggle -->
+<!-- wait: click #controls-toggle -->
+<!-- arm: left -->
+> On {bold}mobile{/bold}, open the filters panel first so you can reach the Analyze button easily.
+
+<!-- timeout: 12 -->
+> Tap this arrow to slide the filters out.
+
+## Step 4: Analyze
 <!-- target: #analyze-btn -->
 <!-- target-mobile: #analyze-btn -->
 <!-- wait: click #analyze-btn -->
@@ -41,9 +51,19 @@
 <!-- timeout: 10 -->
 > That big button right there — give it a click!
 
-## Step 4: Check results
+## Step 5: Check results
 <!-- target: .result-card -->
 <!-- target-mobile: .result-card -->
 <!-- wait: visible .result-card -->
 <!-- arm: right -->
 > {rainbow}Nice!{/rainbow} These are your viewpoints! Click any card to see it on the map!
+
+## Step 6: Close filters
+<!-- mobile-only: true -->
+<!-- target-mobile: #controls-toggle -->
+<!-- wait: click #controls-toggle -->
+<!-- arm: left -->
+> One more mobile tip: tap this arrow again to {bold}close the filters{/bold} and give the results more room.
+
+<!-- timeout: 12 -->
+> Tuck the panel away so the map and result list have more space.
