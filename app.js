@@ -9,6 +9,17 @@ const RECT_STYLE = {
   color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
 };
 const t = window.i18n.t;
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const OPENTOPOMAP_ATTRIBUTION =
+  `Map data: ${OSM_ATTRIBUTION}, SRTM | ` +
+  `Map style: &copy; <a href="https://opentopomap.org/about">OpenTopoMap</a> (CC-BY-SA)`;
+const ESRI_WORLD_TOPO_ATTRIBUTION =
+  'Sources: Esri, HERE, Garmin, Intermap, INCREMENT P, GEBCO, USGS, FAO, NPS, ' +
+  'NRCan, GeoBase, IGN, Kadaster NL, Ordnance Survey, Esri Japan, METI, Mapwithyou, ' +
+  'NOSTRA, &copy; OpenStreetMap contributors, and the GIS User Community';
+const ESRI_WORLD_IMAGERY_ATTRIBUTION =
+  'Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community';
 
 // ===== Mobile Detection =====
 const IS_MOBILE = window.matchMedia('(max-width: 600px)').matches ||
@@ -108,6 +119,7 @@ function init() {
   initDrawControls();
   initSliders();
   initButtons();
+  updateGlobeAttribution();
   if (!IS_MOBILE) {
     initWindowDrag();
     initWindowResize();
@@ -139,7 +151,7 @@ function initMap() {
   const osm = L.tileLayer(
     'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {
-      attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>',
+      attribution: OSM_ATTRIBUTION,
       maxZoom: 19,
     }
   );
@@ -148,7 +160,7 @@ function initMap() {
   const topo = L.tileLayer(
     'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     {
-      attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+      attribution: OPENTOPOMAP_ATTRIBUTION,
       maxZoom: 17,
     }
   );
@@ -156,7 +168,7 @@ function initMap() {
   const worldTopo = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
     {
-      attribution: '&copy; <a href="https://www.esri.com">Esri</a>',
+      attribution: ESRI_WORLD_TOPO_ATTRIBUTION,
       maxZoom: 19,
     }
   );
@@ -164,7 +176,7 @@ function initMap() {
   const satellite = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {
-      attribution: '&copy; <a href="https://www.esri.com">Esri</a>',
+      attribution: ESRI_WORLD_IMAGERY_ATTRIBUTION,
       maxZoom: 19,
     }
   );
@@ -650,7 +662,7 @@ function initButtons() {
       t('helpStep4'),
       t('helpStep5'),
       t('helpStep6'),
-    ]);
+    ], buildHelpCreditsHtml());
   });
 
   // Desktop icon: open/focus Search window
@@ -808,12 +820,20 @@ function iconPop(iconEl) {
 }
 
 // ===== Help Tooltip =====
-function toggleHelpTooltip(btnEl, items) {
+function toggleHelpTooltip(btnEl, items, footerHtml) {
   const tooltip = document.getElementById('help-tooltip');
+  const footer = document.getElementById('help-tooltip-footer');
   if (!tooltip.hidden) { tooltip.hidden = true; return; }
 
   document.getElementById('help-tooltip-list').innerHTML = items.map(item => `<li>${item}</li>`).join('');
   tooltip.querySelector('.help-tooltip-title').textContent = t('helpTitle');
+  if (footerHtml) {
+    footer.innerHTML = footerHtml;
+    footer.hidden = false;
+  } else {
+    footer.innerHTML = '';
+    footer.hidden = true;
+  }
 
   // Reveal off-screen first to measure
   tooltip.style.visibility = 'hidden';
@@ -829,6 +849,33 @@ function toggleHelpTooltip(btnEl, items) {
   tooltip.style.top  = top  + 'px';
   tooltip.style.left = left + 'px';
   tooltip.style.visibility = '';
+}
+
+function buildHelpCreditsHtml() {
+  const silkLink = '<a href="https://www.famfamfam.com/lab/icons/silk/" target="_blank" rel="noopener noreferrer">Silk by Mark James</a>';
+  const ccLink = '<a href="https://creativecommons.org/licenses/by/2.5/" target="_blank" rel="noopener noreferrer">CC BY 2.5</a>';
+  const threeLink = '<a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a>';
+
+  return [
+    `<div class="help-tooltip-footer-title">${t('helpCreditsTitle')}</div>`,
+    `<p>${t('helpCreditsMap')}</p>`,
+    `<p>${t('helpCreditsGeocoding')}</p>`,
+    `<p>${t('helpCreditsIcons', { silk: silkLink, license: ccLink })}</p>`,
+    `<p>${t('helpCreditsRendering', { three: threeLink })}</p>`,
+  ].join('');
+}
+
+function updateGlobeAttribution() {
+  const attributionEl = document.getElementById('globe-attribution');
+  if (!attributionEl) return;
+
+  const imageryLink = '<a href="https://doc.arcgis.com/en/data-appliance/2022/maps/world-imagery-map.htm" target="_blank" rel="noopener noreferrer">Esri, Maxar, Earthstar Geographics, and the GIS User Community</a>';
+  const osmLink = '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>';
+  const nominatimLink = '<a href="https://operations.osmfoundation.org/policies/nominatim/" target="_blank" rel="noopener noreferrer">Nominatim</a>';
+
+  attributionEl.innerHTML =
+    `<span class="globe-attribution-row"><strong>${t('globeImageryLabel')}</strong> ${imageryLink}</span>` +
+    `<span class="globe-attribution-row"><strong>${t('globeGeocodingLabel')}</strong> ${osmLink} via ${nominatimLink}</span>`;
 }
 
 document.addEventListener('click', (e) => {
@@ -1745,6 +1792,7 @@ function hideProgress() {
 function handleLanguageChange() {
   localizeDrawLocal();
   rebuildLayerControl();
+  updateGlobeAttribution();
   validateSelection(state.selectionBounds);
 
   if (!document.getElementById('loved-window').hidden) {

@@ -7,7 +7,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(cp /home/alphanumeric/Documents/Programming/AI/desktop-buddy/dist/desktop-buddy.iife.js /home/alphanumeric/Documents/Programming/AI/world-toolkit/vendor/desktop-buddy/)",
-      "Bash(cp -r /home/alphanumeric/Documents/Programming/AI/desktop-buddy/dist/Models/ /home/alphanumeric/Documents/Programming/AI/world-toolkit/Models/)"
+      "Bash(cp -r /home/alphanumeric/Documents/Programming/AI/desktop-buddy/dist/Models/ /home/alphanumeric/Documents/Programming/AI/world-toolkit/Models/)",
+      "Bash(git commit:*)"
     ]
   },
   "enabledPlugins": {

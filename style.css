@@ -214,6 +214,38 @@ html, body {
   background: rgba(9, 172, 226, 0.5);
 }
 
+#globe-attribution {
+  position: fixed;
+  top: 334px;
+  right: 28px;
+  z-index: 200;
+  width: 240px;
+  text-align: center;
+  font-family: var(--font-main);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-white);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  padding: 6px 8px;
+  background: rgba(9, 172, 226, 0.18);
+  border: 1px solid rgba(151, 214, 244, 0.2);
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+#globe-attribution a {
+  color: #DDF4FF;
+}
+
+.globe-attribution-row {
+  display: block;
+}
+
+.globe-attribution-row + .globe-attribution-row {
+  margin-top: 4px;
+}
+
 /* ===== Main Window ===== */
 #main-window {
   position: fixed;
@@ -471,6 +503,9 @@ html, body {
   background: rgba(255, 255, 255, 0.8) !important;
   color: var(--text-muted) !important;
   font-size: 10px !important;
+  line-height: 1.35 !important;
+  max-width: min(420px, calc(100vw - 32px));
+  white-space: normal !important;
 }
 .leaflet-control-attribution a { color: var(--accent-blue) !important; }
 
@@ -1527,6 +1562,36 @@ a.action-btn {
   line-height: 1.4;
 }
 
+.help-tooltip-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(200, 180, 96, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dark);
+}
+
+.help-tooltip-footer[hidden] { display: none; }
+
+.help-tooltip-footer-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-blue-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+
+.help-tooltip-footer p {
+  margin: 0;
+}
+
+.help-tooltip-footer a {
+  color: var(--accent-blue-dark);
+}
+
 /* ===== Recycle Bin Menu ===== */
 .recycle-menu {
   position: fixed;
@@ -1579,6 +1644,7 @@ a.action-btn {
   #search-bar { display: none; }
   #earth-globe { display: none; }
   #globe-label { display: none; }
+  #globe-attribution { display: none; }
 
   #window-content {
     flex-direction: column;
@@ -1676,6 +1742,14 @@ a.action-btn {
     left: 50%;
     right: auto;
     transform: translateX(-50%);
+  }
+
+  #globe-attribution {
+    top: calc(50% + 78px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(260px, calc(100vw - 32px));
   }
 
   /* ---- Fullscreen Windows ---- */
@@ -1811,6 +1885,15 @@ a.action-btn {
 }
 
 /* ===== Desktop Buddy (Rocky) Overrides ===== */
+
+/* The buddy's render canvas is appended directly to <body>. Without
+   touch-action:none, mobile browsers claim limb-drag touches as a
+   pan/scroll gesture and cancel the pointer stream mid-drag, so the
+   buddy gets stuck. Leaflet's canvases live inside .leaflet-container,
+   so this selector only targets the buddy. */
+body > canvas {
+  touch-action: none;
+}
 
 /* Override buddy input prompt to match Aero theme */
 input[placeholder="Say something to Rocky..."] {
