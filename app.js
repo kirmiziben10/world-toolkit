@@ -689,6 +689,7 @@ function initButtons() {
   document.getElementById('icon-search-spots').addEventListener('click', () => {
     const win = document.getElementById('main-window');
     iconPop(document.getElementById('icon-search-spots'));
+    if (window.RadioReach) window.RadioReach.setActive(false);
     if (win.hidden) {
       win.hidden = false;
       win.style.zIndex = getTopZ();
@@ -758,10 +759,13 @@ function initButtons() {
     initMaximize('radio-window',   'btn-maximize-radio');
   }
 
-  // Bring any window to front on click
+  // Bring any window to front on click — deactivate Radio Reach when focusing other windows
   ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(id => {
     document.getElementById(id).addEventListener('mousedown', () => {
       document.getElementById(id).style.zIndex = getTopZ();
+      if (window.RadioReach) {
+        window.RadioReach.setActive(id === 'radio-window');
+      }
     });
   });
 }

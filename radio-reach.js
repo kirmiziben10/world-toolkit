@@ -181,17 +181,19 @@
       total: 360
     });
 
-    // Paint visible points
+    // Paint visible points (incremental)
+    var layer = radioState.canvasLayer;
+    var prevLen = layer._points.length;
     for (var i = 0; i < msg.rays.length; i++) {
       var ray = msg.rays[i];
       for (var j = 0; j < ray.reachablePoints.length; j++) {
         var pt = ray.reachablePoints[j];
         if (pt.visible) {
-          radioState.canvasLayer.addPoint(pt.lat, pt.lng);
+          layer.addPoint(pt.lat, pt.lng);
         }
       }
     }
-    radioState.canvasLayer.render();
+    layer.renderIncremental(prevLen);
   }
 
   function handleDone(stats) {
@@ -282,12 +284,15 @@
   }
 
   // ===== Canvas Coverage Layer =====
-  // Custom Leaflet layer that accumulates points and renders them as a single canvas
+  // Custom Leaflet layer that accumulates visible coverage points and renders
+  // them as filled rectangles on a canvas. Uses an offscreen buffer keyed by
+  // pixel coordinates to avoid re-projecting every point on every render.
   var RadioCoverageLayer = L.Layer.extend({
     initialize: function () {
       this._points = []; // [[lat, lng], ...]
       this._canvas = null;
       this._ctx = null;
+      this._dirty = false;
     },
 
     onAdd: function (map) {
@@ -304,8 +309,8 @@
       this._ctx = this._canvas.getContext('2d');
       map.getPanes().overlayPane.appendChild(this._canvas);
 
-      map.on('moveend', this._repositionCanvas, this);
-      map.on('zoomend', this._repositionCanvas, this);
+      map.on('moveend', this._fullRedraw, this);
+      map.on('zoomend', this._fullRedraw, this);
       map.on('resize', this._onResize, this);
       this._repositionCanvas();
     },
@@ -314,8 +319,8 @@
       if (this._canvas && this._canvas.parentNode) {
         this._canvas.parentNode.removeChild(this._canvas);
       }
-      map.off('moveend', this._repositionCanvas, this);
-      map.off('zoomend', this._repositionCanvas, this);
+      map.off('moveend', this._fullRedraw, this);
+      map.off('zoomend', this._fullRedraw, this);
       map.off('resize', this._onResize, this);
       this._canvas = null;
       this._ctx = null;
@@ -326,50 +331,50 @@
       var size = this._map.getSize();
       this._canvas.width = size.x;
       this._canvas.height = size.y;
-      this.render();
+      this._repositionCanvas();
+      this._fullRedraw();
     },
 
     _repositionCanvas: function () {
       if (!this._map || !this._canvas) return;
       var topLeft = this._map.containerPointToLayerPoint([0, 0]);
       L.DomUtil.setPosition(this._canvas, topLeft);
-      var size = this._map.getSize();
-      this._canvas.width = size.x;
-      this._canvas.height = size.y;
-      this.render();
     },
 
     addPoint: function (lat, lng) {
       this._points.push([lat, lng]);
     },
 
-    render: function () {
+    // Incremental render: only draw newly added points
+    renderIncremental: function (startIdx) {
       if (!this._ctx || !this._map) return;
       var ctx = this._ctx;
       var map = this._map;
-      var canvas = this._canvas;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (this._points.length === 0) return;
-
-      // Determine pixel size for coverage rectangles
-      // Each point represents ~1 pixel at the analysis zoom,
-      // so size it proportionally to current map zoom
       var currentZoom = map.getZoom();
       var scaleFactor = Math.pow(2, currentZoom - ANALYSIS_ZOOM);
       var pixelSize = Math.max(1, Math.ceil(scaleFactor));
+      var w = this._canvas.width;
+      var h = this._canvas.height;
 
       ctx.fillStyle = 'rgba(34, 197, 94, 0.35)';
 
       var pts = this._points;
-      for (var i = 0; i < pts.length; i++) {
+      for (var i = startIdx; i < pts.length; i++) {
         var p = map.latLngToContainerPoint([pts[i][0], pts[i][1]]);
-        // Skip points outside canvas
-        if (p.x < -pixelSize || p.x > canvas.width + pixelSize ||
-            p.y < -pixelSize || p.y > canvas.height + pixelSize) continue;
+        if (p.x < -pixelSize || p.x > w + pixelSize ||
+            p.y < -pixelSize || p.y > h + pixelSize) continue;
         ctx.fillRect(p.x - pixelSize / 2, p.y - pixelSize / 2, pixelSize, pixelSize);
       }
+    },
+
+    // Full redraw: clear canvas and re-render all points
+    _fullRedraw: function () {
+      if (!this._ctx || !this._map || !this._canvas) return;
+      this._repositionCanvas();
+      var size = this._map.getSize();
+      this._canvas.width = size.x;
+      this._canvas.height = size.y;
+      this.renderIncremental(0);
     },
   });
 
