@@ -2,13 +2,18 @@
 const DEFAULT_CENTER = [39.0, 35.5]; // Turkey centered
 const DEFAULT_ZOOM = 6;
 const ANALYSIS_ZOOM = 11;
-const TILE_SIZE = 256;
-const TERRAIN_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 const MAX_TILES = 80;
 const RECT_STYLE = {
   color: '#09ACE2', weight: 2, fillOpacity: 0.1, dashArray: '8, 6',
 };
 const t = window.i18n.t;
+const TerrainTiles = window.TerrainTiles;
+const TILE_SIZE = TerrainTiles.TILE_SIZE;
+const getTile = TerrainTiles.getTile;
+const lngToTileX = TerrainTiles.lngToTileX;
+const latToTileY = TerrainTiles.latToTileY;
+const tileToLng = TerrainTiles.tileToLng;
+const tileToLat = TerrainTiles.tileToLat;
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const OPENTOPOMAP_ATTRIBUTION =
@@ -1167,18 +1172,6 @@ function initXpWindow(winId, titlebarId) {
   });
 }
 
-function lngToTileX(lng, zoom) {
-  return Math.floor(((lng + 180) / 360) * Math.pow(2, zoom));
-}
-
-function latToTileY(lat, zoom) {
-  const latRad = (lat * Math.PI) / 180;
-  return Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-      Math.pow(2, zoom)
-  );
-}
-
 // Compute how many tiles a bounds selection requires (with 1-tile padding)
 function countTilesForBounds(bounds) {
   const xMin = lngToTileX(bounds.getWest(), ANALYSIS_ZOOM) - 1;
@@ -1203,15 +1196,6 @@ function validateSelection(bounds) {
     analyzeBtnEl.disabled = false;
     analyzeBtnTextEl.textContent = t('analyzeArea');
   }
-}
-
-function tileToLng(x, zoom) {
-  return (x / Math.pow(2, zoom)) * 360 - 180;
-}
-
-function tileToLat(y, zoom) {
-  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, zoom);
-  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 
 // ===== Fetch & Decode Terrain Tiles =====
@@ -1240,12 +1224,6 @@ async function fetchElevationGrid(bounds, zoom) {
   const width = tilesX * TILE_SIZE;
   const height = tilesY * TILE_SIZE;
   const elevations = new Float32Array(width * height);
-
-  // Create a canvas for decoding
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   let loaded = 0;
 
@@ -1294,9 +1272,9 @@ async function fetchElevationGrid(bounds, zoom) {
         state.tileBoundaries.push(rect);
       }
 
-      const promise = fetchTileImage(zoom, tx, ty)
-        .then((img) => {
-          ctx.drawImage(img, offsetX, offsetY);
+      const promise = getTile(zoom, tx, ty)
+        .then((tileData) => {
+          copyTileIntoGrid(tileData, elevations, width, offsetX, offsetY);
           loaded++;
           if (rect) rect.setStyle({ dashArray: null, color: '#09ACE2', weight: 1.5 });
           updateProgress(
@@ -1320,17 +1298,7 @@ async function fetchElevationGrid(bounds, zoom) {
 
   await Promise.all(promises);
 
-  // Decode all pixels
   updateProgress(t('decodingElevation'), 55);
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const pixels = imageData.data;
-
-  for (let i = 0; i < width * height; i++) {
-    const r = pixels[i * 4];
-    const g = pixels[i * 4 + 1];
-    const b = pixels[i * 4 + 2];
-    elevations[i] = r * 256 + g + b / 256 - 32768;
-  }
 
   return {
     elevations,
@@ -1342,14 +1310,13 @@ async function fetchElevationGrid(bounds, zoom) {
   };
 }
 
-function fetchTileImage(zoom, x, y) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = `${TERRAIN_URL}/${zoom}/${x}/${y}.png`;
-  });
+function copyTileIntoGrid(tileData, grid, gridWidth, offsetX, offsetY) {
+  for (let row = 0; row < TILE_SIZE; row++) {
+    const srcStart = row * TILE_SIZE;
+    const srcEnd = srcStart + TILE_SIZE;
+    const destStart = (offsetY + row) * gridWidth + offsetX;
+    grid.set(tileData.subarray(srcStart, srcEnd), destStart);
+  }
 }
 
 // ===== Analysis Pipeline =====

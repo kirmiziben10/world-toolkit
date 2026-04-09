@@ -1,13 +1,17 @@
 // ===== Terrain Analysis WebWorker =====
 // Runs entirely off the main thread for smooth UI
+importScripts('terrain-tiles.js');
 
 const EARTH_RADIUS = 6378137; // meters
-const TILE_SIZE = 256;
+const TILE_SIZE = self.TerrainTiles.TILE_SIZE;
 const SUBSAMPLE = 3; // Check every Nth pixel for viewpoint candidates
 const PEAK_WINDOW_PX = 9; // Half-window for peak detection (pixels)
 const PROFILE_SAMPLES = 30; // Points to sample along view-to-peak line
 const CLUSTER_DISTANCE_M = 400; // Min distance between results (meters)
 const MAX_RESULTS = 150;
+const metersPerPixel = self.TerrainTiles.metersPerPixel;
+const tileToLat = self.TerrainTiles.tileToLat;
+const tileToLng = self.TerrainTiles.tileToLng;
 
 // ===== Message Handler =====
 self.onmessage = function (e) {
@@ -74,19 +78,12 @@ function progress(key, percent, detailKey, params) {
 // ===== Coordinate Conversions =====
 function pixelToLng(px, info) {
   const tileXFrac = info.tileXMin + px / TILE_SIZE;
-  const n = Math.pow(2, info.zoom);
-  return (tileXFrac / n) * 360 - 180;
+  return tileToLng(tileXFrac, info.zoom);
 }
 
 function pixelToLat(py, info) {
   const tileYFrac = info.tileYMin + py / TILE_SIZE;
-  const n = Math.pow(2, info.zoom);
-  const latRad = Math.atan(Math.sinh(Math.PI * (1 - (2 * tileYFrac) / n)));
-  return (latRad * 180) / Math.PI;
-}
-
-function metersPerPixel(lat, zoom) {
-  return (Math.cos((lat * Math.PI) / 180) * 2 * Math.PI * EARTH_RADIUS) / (TILE_SIZE * Math.pow(2, zoom));
+  return tileToLat(tileYFrac, info.zoom);
 }
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
