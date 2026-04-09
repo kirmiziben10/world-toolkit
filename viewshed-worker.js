@@ -172,30 +172,28 @@ function processRays(stepM, maxSteps) {
   }
 
   var completedRays = 0;
-  var batchPoints = [];
 
   function processBatch() {
     var neededTiles = [];
     var neededSet = {};
     var batchCompleted = [];
-    var needsTiles = false;
 
     for (var i = 0; i < rays.length; i++) {
       var ray = rays[i];
+      if (ray.done) continue;
       if (ray.blocked || ray.step >= maxSteps) {
-        if (!ray.done) {
-          ray.done = true;
-          completedRays++;
-          batchCompleted.push({
-            azimuth: ray.azimuth,
-            reachablePoints: ray.points
-          });
-        }
+        ray.done = true;
+        completedRays++;
+        batchCompleted.push({
+          azimuth: ray.azimuth,
+          reachablePoints: ray.points
+        });
         continue;
       }
 
       // Walk this ray forward
       var stepsThisBatch = 0;
+      var rayNeedsTile = false;
       while (ray.step < maxSteps && !ray.blocked && stepsThisBatch < 200) {
         ray.step++;
         stepsThisBatch++;
@@ -211,7 +209,7 @@ function processRays(stepM, maxSteps) {
           }
           // Back up one step so we re-process this point after tiles arrive
           ray.step--;
-          needsTiles = true;
+          rayNeedsTile = true;
           break;
         }
 
@@ -236,8 +234,8 @@ function processRays(stepM, maxSteps) {
         ray.points.push({ lat: pt.lat, lng: pt.lng, visible: true });
       }
 
-      // If ray just completed without needing tiles
-      if (!needsTiles && (ray.blocked || ray.step >= maxSteps) && !ray.done) {
+      // If ray completed (blocked or reached end) without needing a tile
+      if (!rayNeedsTile && (ray.blocked || ray.step >= maxSteps) && !ray.done) {
         ray.done = true;
         completedRays++;
         batchCompleted.push({
@@ -267,11 +265,6 @@ function processRays(stepM, maxSteps) {
 
     // If we need tiles, request them and continue
     if (neededTiles.length > 0) {
-      self.postMessage({
-        type: 'rayBatch',
-        rays: batchCompleted.length > 0 ? [] : [],
-        progress: completedRays / RAY_COUNT
-      });
       requestTilesAndRun(neededTiles, processBatch);
     } else {
       // All rays either done or still walking — keep going

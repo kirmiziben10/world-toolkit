@@ -11,6 +11,8 @@
   var metersPerPixel = TerrainTiles.metersPerPixel;
   var t = window.i18n.t;
   var ANALYSIS_ZOOM = 12;
+  var EARTH_RADIUS = 6378137;
+  var MAX_TILES_LIMIT = 500;
 
   var radioState = {
     marker: null,
@@ -158,9 +160,10 @@
       if (!radioState.worker) return;
       var transfers = [];
       var tileData = results.map(function (r) {
-        var buf = r.data.buffer.byteLength > 0 ? r.data.buffer : new Float32Array(r.data).buffer;
-        transfers.push(buf);
-        return { z: r.z, x: r.x, y: r.y, data: buf };
+        // Copy the data so the shared tile cache isn't neutered by transfer
+        var copy = new Float32Array(r.data);
+        transfers.push(copy.buffer);
+        return { z: r.z, x: r.x, y: r.y, data: copy.buffer };
       });
       radioState.worker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
 
@@ -234,7 +237,7 @@
     progressEl.hidden = true;
 
     if (msg.message === 'TILE_LIMIT') {
-      statsEl.innerHTML = t('radioTileLimitExceeded', { n: msg.count || MAX_TILES });
+      statsEl.innerHTML = t('radioTileLimitExceeded', { n: msg.count || MAX_TILES_LIMIT });
     } else {
       statsEl.innerHTML = t('radioAborted') + ': ' + sanitize(msg.message);
     }
@@ -391,8 +394,6 @@
             Math.sin(dLng / 2) * Math.sin(dLng / 2);
     return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
-
-  var EARTH_RADIUS = 6378137;
 
   function sanitize(str) {
     var div = document.createElement('div');
