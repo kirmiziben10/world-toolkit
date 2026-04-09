@@ -1630,23 +1630,64 @@ a.action-btn {
 }
 
 /* ===== Radio Reach Window ===== */
-.radio-window-content {
-  padding: 0;
-}
+/* Mirror the Search for Spots layout: full window with sidebar + map */
 
-.radio-panel {
-  padding: 16px 20px;
+#radio-window {
+  min-width: 400px;
+  min-height: 300px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+}
+
+#radio-window-content {
+  position: relative;
   flex: 1;
+  margin: 0 5px 5px 5px;
+  border: 2px solid var(--win-content-border);
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+}
+
+#radio-map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+#radio-controls-panel {
+  position: relative;
+  z-index: 2;
+  width: 277px;
+  min-width: 277px;
+  flex-shrink: 0;
+  background: rgba(238, 228, 199, 0.8);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border-right: 1px solid #E1CC94;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#radio-controls-panel.collapsed {
+  margin-left: -267px;
+}
+
+#radio-controls-toggle {
+  left: 277px;
+}
+
+#radio-controls-toggle.collapsed {
+  left: 10px;
 }
 
 .radio-instruction {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.4;
+  margin-bottom: 8px;
 }
 
 .radio-coords {
@@ -1657,26 +1698,9 @@ a.action-btn {
   border-radius: var(--radius-sm);
   background: rgba(9, 172, 226, 0.08);
   border: 1px solid rgba(9, 172, 226, 0.18);
+  margin-bottom: 8px;
 }
 .radio-coords[hidden] { display: none; }
-
-.radio-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.radio-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.radio-field label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-dark);
-}
 
 .radio-input-row {
   display: flex;
@@ -1685,7 +1709,7 @@ a.action-btn {
 }
 
 .radio-input-row input[type="number"],
-.radio-field select {
+.radio-select {
   flex: 1;
   padding: 6px 8px;
   border: 1px solid #E1CC94;
@@ -1699,7 +1723,7 @@ a.action-btn {
 }
 
 .radio-input-row input[type="number"]:focus,
-.radio-field select:focus {
+.radio-select:focus {
   border-color: var(--accent-blue);
 }
 
@@ -1709,29 +1733,39 @@ a.action-btn {
   min-width: 20px;
 }
 
-.radio-progress {
+/* Radio stats panel (mirrors #results-panel) */
+#radio-stats-panel {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 320px;
+  max-height: 50%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
-.radio-progress[hidden] { display: none; }
+#radio-stats-panel[hidden] { display: none; }
 
-.radio-progress-text {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.radio-stats {
+.radio-stats-body {
   font-size: 12px;
   color: var(--text-dark);
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  background: rgba(9, 172, 226, 0.06);
-  border: 1px solid rgba(9, 172, 226, 0.15);
-  line-height: 1.6;
+  padding: 12px 14px;
+  line-height: 1.8;
 }
-.radio-stats[hidden] { display: none; }
+
+/* Radio progress overlay (mirrors #progress-overlay) */
+#radio-progress-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 40, 80, 0.35);
+  backdrop-filter: blur(3px);
+}
+#radio-progress-overlay[hidden] { display: none; }
 
 /* Radio Reach transmitter marker */
 .radio-tx-marker {
@@ -1783,6 +1817,23 @@ a.action-btn {
   .controls-toggle { display: none; }
 
   #results-panel {
+    width: calc(100% - 24px);
+    left: 12px;
+  }
+
+  /* Radio Reach: same treatment as main window at tablet */
+  #radio-window-content {
+    flex-direction: column;
+  }
+  #radio-controls-panel {
+    width: 100%;
+    min-width: unset;
+    max-height: 50%;
+    border-right: none;
+    border-bottom: 1px solid #b8c8d8;
+  }
+  #radio-controls-toggle { display: none; }
+  #radio-stats-panel {
     width: calc(100% - 24px);
     left: 12px;
   }
@@ -1964,6 +2015,47 @@ a.action-btn {
 
   /* Results panel: bottom sheet style */
   #results-panel {
+    width: calc(100% - 16px);
+    left: 8px;
+    bottom: 8px;
+    max-height: 45%;
+  }
+
+  /* Radio Reach: mobile overrides */
+  #radio-window-content {
+    margin: 0;
+    border-radius: 0;
+    border-width: 0;
+  }
+  #radio-controls-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    width: 80vw;
+    min-width: 0;
+    max-width: 320px;
+    height: 100%;
+    border-right: 1px solid #E1CC94;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
+  }
+  #radio-controls-panel.collapsed {
+    margin-left: calc(-1 * min(80vw, 320px) + 5px);
+  }
+  #radio-controls-toggle {
+    left: min(80vw, 320px);
+    height: 48px;
+    width: 32px;
+    z-index: 6;
+  }
+  #radio-controls-toggle.collapsed {
+    left: 5px;
+  }
+  #radio-map {
+    position: absolute;
+    inset: 0;
+  }
+  #radio-stats-panel {
     width: calc(100% - 16px);
     left: 8px;
     bottom: 8px;

@@ -157,9 +157,6 @@ function initMap() {
     zoomControl: false,
   });
 
-  // Expose map for companion apps (Radio Reach etc.)
-  window._worldToolkitMap = state.map;
-
   // Standard OSM base layer (fits the XP/7 light theme)
   const osm = L.tileLayer(
     'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -234,12 +231,6 @@ function initMap() {
     }));
   });
 
-  // Route map clicks to Radio Reach when it's active
-  state.map.on('click', (e) => {
-    if (window.RadioReach && window.RadioReach.isActive()) {
-      window.RadioReach.handleMapClick(e.latlng, state.map);
-    }
-  });
 }
 
 function getLocalizedBaseLayers() {
@@ -689,7 +680,6 @@ function initButtons() {
   document.getElementById('icon-search-spots').addEventListener('click', () => {
     const win = document.getElementById('main-window');
     iconPop(document.getElementById('icon-search-spots'));
-    if (window.RadioReach) window.RadioReach.setActive(false);
     if (win.hidden) {
       win.hidden = false;
       win.style.zIndex = getTopZ();
@@ -724,10 +714,10 @@ function initButtons() {
           win.style.width  = saved.width  + 'px';
           win.style.height = saved.height + 'px';
         } else {
-          win.style.top = '120px';
-          win.style.left = 'calc(50% - 160px)';
-          win.style.width = '320px';
-          win.style.height = '520px';
+          win.style.top = '106px';
+          win.style.left = '124px';
+          win.style.width = 'calc(100vw - 248px)';
+          win.style.height = 'calc(100vh - 132px)';
         }
       }
       win.hidden = false;
@@ -736,7 +726,7 @@ function initButtons() {
     } else {
       win.style.zIndex = getTopZ();
     }
-    if (window.RadioReach) window.RadioReach.setActive(true);
+    if (window.RadioReach) window.RadioReach.invalidateMap();
   });
 
   // Close secondary windows
@@ -748,7 +738,6 @@ function initButtons() {
   });
   document.getElementById('btn-close-radio').addEventListener('click', () => {
     closeWindow(document.getElementById('radio-window'), document.getElementById('icon-radio-reach'));
-    if (window.RadioReach) window.RadioReach.setActive(false);
   });
 
   // Maximize buttons (desktop only)
@@ -759,13 +748,10 @@ function initButtons() {
     initMaximize('radio-window',   'btn-maximize-radio');
   }
 
-  // Bring any window to front on click — deactivate Radio Reach when focusing other windows
+  // Bring any window to front on click
   ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(id => {
     document.getElementById(id).addEventListener('mousedown', () => {
       document.getElementById(id).style.zIndex = getTopZ();
-      if (window.RadioReach) {
-        window.RadioReach.setActive(id === 'radio-window');
-      }
     });
   });
 }

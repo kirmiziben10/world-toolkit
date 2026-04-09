@@ -318,52 +318,81 @@
     <div class="resize-handle resize-nw"></div>
     <div class="resize-handle resize-se"></div>
     <div class="resize-handle resize-sw"></div>
-    <div class="xp-window-content radio-window-content">
-      <div class="radio-panel">
-        <p class="radio-instruction" id="radio-instruction" data-i18n="radioClickToBegin">Click a point on the map to begin.</p>
-        <p class="radio-coords" id="radio-coords" hidden></p>
 
-        <div class="radio-controls">
-          <div class="radio-field">
-            <label for="radio-antenna-height" data-i18n="radioAntennaHeight">Antenna Height</label>
-            <div class="radio-input-row">
-              <input type="number" id="radio-antenna-height" min="0" max="500" value="10" step="1">
-              <span class="radio-unit">m</span>
+    <!-- Window Content (flex container: controls sidebar + map) -->
+    <div id="radio-window-content">
+      <!-- Toggle Chevron -->
+      <div id="radio-controls-toggle" class="controls-toggle" title="Toggle filters" data-i18n-attr="title:toggleFilters">
+        <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <!-- Controls Panel (left sidebar) -->
+      <aside id="radio-controls-panel">
+        <div class="panel-content">
+          <div class="slider-group-label" data-i18n="radioTransmitter">Transmitter</div>
+
+          <p class="radio-instruction" id="radio-instruction" data-i18n="radioClickToBegin">Click on the map to place your transmitter.</p>
+          <p class="radio-coords" id="radio-coords" hidden></p>
+
+          <div class="controls-grid">
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioAntennaHeight">Antenna Height</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-antenna-height" min="0" max="500" value="10" step="1">
+                <span class="radio-unit">m</span>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
+                <span class="radio-unit">km</span>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioFrequency">Frequency</span>
+              <select id="radio-frequency" class="radio-select">
+                <option value="14" data-i18n="radioFreqHF">HF 14 MHz</option>
+                <option value="144" selected data-i18n="radioFreqVHF">VHF 144 MHz</option>
+                <option value="430" data-i18n="radioFreqUHF">UHF 430 MHz</option>
+              </select>
             </div>
           </div>
 
-          <div class="radio-field">
-            <label for="radio-radius" data-i18n="radioAnalysisRadius">Analysis Radius</label>
-            <div class="radio-input-row">
-              <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
-              <span class="radio-unit">km</span>
-            </div>
-          </div>
+          <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
+            <span class="btn-text" data-i18n="radioAnalyze">Analyze</span>
+          </button>
 
-          <div class="radio-field">
-            <label for="radio-frequency" data-i18n="radioFrequency">Frequency</label>
-            <select id="radio-frequency">
-              <option value="14" data-i18n="radioFreqHF">HF 14 MHz</option>
-              <option value="144" selected data-i18n="radioFreqVHF">VHF 144 MHz</option>
-              <option value="430" data-i18n="radioFreqUHF">UHF 430 MHz</option>
-            </select>
-          </div>
+          <button id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
         </div>
+      </aside>
 
-        <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
-          <span class="btn-text" data-i18n="radioAnalyze">Analyze</span>
-        </button>
+      <!-- Map fills the remaining space -->
+      <div id="radio-map"></div>
 
-        <button id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
+      <!-- Stats Panel (bottom-right overlay) -->
+      <div id="radio-stats-panel" class="xp-panel" hidden>
+        <div class="xp-panel-header">
+          <h2 data-i18n="radioResults">Results</h2>
+          <button id="radio-close-stats" class="xp-icon-btn" title="Close" data-i18n-attr="title:close">✕</button>
+        </div>
+        <div id="radio-stats" class="radio-stats-body"></div>
+      </div>
 
-        <div id="radio-progress" class="radio-progress" hidden>
+      <!-- Progress Overlay (centered dialog) -->
+      <div id="radio-progress-overlay" hidden>
+        <div class="progress-card xp-dialog">
+          <div class="progress-spinner"></div>
+          <h3 data-i18n="radioAnalyzing">Analyzing Coverage</h3>
+          <p id="radio-progress-text" data-i18n="preparing">Preparing...</p>
           <div class="progress-track">
             <div id="radio-progress-bar" class="progress-fill"></div>
           </div>
-          <p id="radio-progress-text" class="radio-progress-text"></p>
         </div>
-
-        <div id="radio-stats" class="radio-stats" hidden></div>
       </div>
     </div>
   </div>

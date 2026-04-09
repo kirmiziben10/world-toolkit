@@ -1,7 +1,6 @@
 // ===== Radio Reach — Line-of-Sight Coverage App =====
-// Companion app to Search For Spots. Computes and renders radio
-// viewshed coverage from a user-selected transmitter point.
-// TODO: Rocky tutorial integration — dispatch wt:radio-* events here
+// Full-window app with its own Leaflet map, collapsible filter sidebar,
+// progress overlay, and coverage canvas.
 
 (function () {
   'use strict';
@@ -14,27 +13,31 @@
   var EARTH_RADIUS = 6378137;
   var MAX_TILES_LIMIT = 500;
 
+  // Attribution strings
+  var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  var TOPO_ATTR = 'Map data: ' + OSM_ATTR + ', SRTM | Map style: &copy; <a href="https://opentopomap.org/about">OpenTopoMap</a> (CC-BY-SA)';
+
   var radioState = {
+    map: null,
     marker: null,
     lat: null,
     lng: null,
     worker: null,
     canvasLayer: null,
     running: false,
-    active: false,  // true when Radio Reach window is focused and listening for map clicks
   };
 
   // ===== DOM refs (cached on init) =====
   var coordsEl, instructionEl, analyzeBtnEl, clearBtnEl,
-      progressEl, progressBarEl, progressTextEl, statsEl,
-      antennaInput, radiusInput, frequencySelect;
+      progressOverlayEl, progressBarEl, progressTextEl,
+      statsPanelEl, statsEl,
+      antennaInput, radiusInput, frequencySelect,
+      controlsPanel, controlsToggle;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
     init: init,
-    setActive: setActive,
-    isActive: function () { return radioState.active; },
-    handleMapClick: handleMapClick,
+    invalidateMap: invalidateMap,
   };
 
   function init() {
@@ -42,31 +45,126 @@
     instructionEl = document.getElementById('radio-instruction');
     analyzeBtnEl = document.getElementById('radio-analyze-btn');
     clearBtnEl = document.getElementById('radio-clear-btn');
-    progressEl = document.getElementById('radio-progress');
+    progressOverlayEl = document.getElementById('radio-progress-overlay');
     progressBarEl = document.getElementById('radio-progress-bar');
     progressTextEl = document.getElementById('radio-progress-text');
+    statsPanelEl = document.getElementById('radio-stats-panel');
     statsEl = document.getElementById('radio-stats');
     antennaInput = document.getElementById('radio-antenna-height');
     radiusInput = document.getElementById('radio-radius');
     frequencySelect = document.getElementById('radio-frequency');
+    controlsPanel = document.getElementById('radio-controls-panel');
+    controlsToggle = document.getElementById('radio-controls-toggle');
 
     analyzeBtnEl.addEventListener('click', startAnalysis);
     clearBtnEl.addEventListener('click', clearAll);
+
+    // Stats panel close button
+    document.getElementById('radio-close-stats').addEventListener('click', function () {
+      statsPanelEl.hidden = true;
+    });
+
+    // Controls panel toggle
+    initControlsToggle();
+
+    // Initialize own Leaflet map
+    initMap();
   }
 
-  function setActive(active) {
-    radioState.active = active;
+  // ===== Map =====
+  function initMap() {
+    radioState.map = L.map('radio-map', {
+      center: [39.9, 32.8],
+      zoom: 7,
+      zoomControl: false,
+    });
+
+    // Base layers
+    var topo = L.tileLayer(
+      'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      { attribution: TOPO_ATTR, maxZoom: 17 }
+    );
+    var osm = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution: OSM_ATTR, maxZoom: 19 }
+    );
+    var satellite = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
+    );
+
+    topo.addTo(radioState.map);
+
+    var baseLayers = {};
+    baseLayers[t('layerTopographic')] = topo;
+    baseLayers[t('layerStandard')] = osm;
+    baseLayers[t('layerSatellite')] = satellite;
+    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(radioState.map);
+    L.control.zoom({ position: 'topright' }).addTo(radioState.map);
+
+    // Restore saved position
+    var savedView = localStorage.getItem('sv_radio_map_view') || localStorage.getItem('sv_map_view');
+    if (savedView) {
+      try {
+        var v = JSON.parse(savedView);
+        radioState.map.setView([v.lat, v.lng], v.zoom);
+      } catch (e) {}
+    }
+
+    // Persist position
+    radioState.map.on('moveend', function () {
+      var c = radioState.map.getCenter();
+      localStorage.setItem('sv_radio_map_view', JSON.stringify({
+        lat: c.lat, lng: c.lng, zoom: radioState.map.getZoom(),
+      }));
+    });
+
+    // Map click places transmitter
+    radioState.map.on('click', function (e) {
+      handleMapClick(e.latlng);
+    });
+  }
+
+  function invalidateMap() {
+    if (radioState.map) {
+      setTimeout(function () { radioState.map.invalidateSize(); }, 50);
+    }
+  }
+
+  // ===== Controls Panel Toggle =====
+  function initControlsToggle() {
+    var IS_MOBILE = window.matchMedia('(max-width: 600px)').matches && ('ontouchstart' in window);
+    var storageKey = 'sv_radio_filters_collapsed';
+
+    if (IS_MOBILE || localStorage.getItem(storageKey) === '1') {
+      controlsPanel.style.transition = 'none';
+      controlsToggle.style.transition = 'none';
+      controlsPanel.classList.add('collapsed');
+      controlsToggle.classList.add('collapsed');
+      requestAnimationFrame(function () {
+        controlsPanel.style.transition = '';
+        controlsToggle.style.transition = '';
+        invalidateMap();
+      });
+    }
+
+    controlsToggle.addEventListener('click', function () {
+      controlsPanel.classList.toggle('collapsed');
+      controlsToggle.classList.toggle('collapsed');
+      localStorage.setItem(storageKey, controlsPanel.classList.contains('collapsed') ? '1' : '0');
+      requestAnimationFrame(function () {
+        setTimeout(function () { invalidateMap(); }, 310);
+      });
+    });
   }
 
   // ===== Map Click Handler =====
-  function handleMapClick(latlng, map) {
-    if (!radioState.active) return;
+  function handleMapClick(latlng) {
     if (radioState.running) return;
 
     radioState.lat = latlng.lat;
     radioState.lng = latlng.lng;
 
-    // Place or move marker
     if (radioState.marker) {
       radioState.marker.setLatLng(latlng);
     } else {
@@ -77,16 +175,13 @@
           iconSize: [20, 20],
           iconAnchor: [10, 10],
         }),
-      }).addTo(map);
+      }).addTo(radioState.map);
     }
 
-    // Show coords
     coordsEl.textContent = t('radioSelectedPoint') + ': ' +
-      radioState.lat.toFixed(5) + '°N, ' + radioState.lng.toFixed(5) + '°E';
+      radioState.lat.toFixed(5) + ', ' + radioState.lng.toFixed(5);
     coordsEl.hidden = false;
     instructionEl.hidden = true;
-
-    // Enable analyze
     analyzeBtnEl.disabled = false;
   }
 
@@ -102,20 +197,17 @@
     radioState.running = true;
     analyzeBtnEl.disabled = true;
     clearBtnEl.hidden = true;
-    statsEl.hidden = true;
-    progressEl.hidden = false;
+    statsPanelEl.hidden = true;
+
+    progressOverlayEl.hidden = false;
     progressBarEl.style.width = '0%';
     progressTextEl.textContent = t('radioAnalyzing');
 
-    // Clear previous overlay
     removeOverlay();
 
-    // Create canvas overlay
-    var map = getMap();
     radioState.canvasLayer = new RadioCoverageLayer();
-    radioState.canvasLayer.addTo(map);
+    radioState.canvasLayer.addTo(radioState.map);
 
-    // Spawn worker
     if (radioState.worker) radioState.worker.terminate();
     radioState.worker = new Worker('viewshed-worker.js');
 
@@ -151,7 +243,6 @@
       return getTile(tc.z, tc.x, tc.y).then(function (data) {
         return { z: tc.z, x: tc.x, y: tc.y, data: data };
       }).catch(function () {
-        // Return a flat zero tile on failure
         return { z: tc.z, x: tc.x, y: tc.y, data: new Float32Array(256 * 256) };
       });
     });
@@ -160,14 +251,11 @@
       if (!radioState.worker) return;
       var transfers = [];
       var tileData = results.map(function (r) {
-        // Copy the data so the shared tile cache isn't neutered by transfer
         var copy = new Float32Array(r.data);
         transfers.push(copy.buffer);
         return { z: r.z, x: r.x, y: r.y, data: copy.buffer };
       });
       radioState.worker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
-
-      // Update tile count display
       progressTextEl.textContent = t('radioFetchingTiles');
     });
   }
@@ -181,7 +269,6 @@
       total: 360
     });
 
-    // Paint visible points (incremental)
     var layer = radioState.canvasLayer;
     var prevLen = layer._points.length;
     for (var i = 0; i < msg.rays.length; i++) {
@@ -200,9 +287,8 @@
     radioState.running = false;
     analyzeBtnEl.disabled = false;
     clearBtnEl.hidden = false;
-    progressEl.hidden = true;
+    progressOverlayEl.hidden = true;
 
-    // Compute max reach
     var maxReachKm = 0;
     if (radioState.canvasLayer && radioState.canvasLayer._points.length > 0) {
       var pts = radioState.canvasLayer._points;
@@ -214,18 +300,16 @@
     }
 
     var radiusKm = parseFloat(radiusInput.value) || 30;
-    // Approximate coverage: visible area / total circular area
-    // Use point count as proxy — each point covers ~1 pixel area
     var totalRayPoints = 360 * Math.ceil(radiusKm * 1000 / metersPerPixel(radioState.lat, ANALYSIS_ZOOM));
     var visibleCount = radioState.canvasLayer ? radioState.canvasLayer._points.length : 0;
     var coverage = totalRayPoints > 0 ? Math.min(100, Math.round((visibleCount / totalRayPoints) * 100)) : 0;
 
     statsEl.innerHTML =
-      t('radioComplete') + '<br>' +
+      '<strong>' + t('radioComplete') + '</strong><br>' +
       t('radioTilesUsed', { n: stats.tilesUsed }) + '<br>' +
       t('radioMaxReach', { km: maxReachKm.toFixed(1) }) + '<br>' +
       t('radioCoverage', { pct: coverage });
-    statsEl.hidden = false;
+    statsPanelEl.hidden = false;
 
     if (radioState.worker) {
       radioState.worker.terminate();
@@ -236,14 +320,14 @@
   function handleError(msg) {
     radioState.running = false;
     analyzeBtnEl.disabled = radioState.lat === null;
-    progressEl.hidden = true;
+    progressOverlayEl.hidden = true;
 
     if (msg.message === 'TILE_LIMIT') {
       statsEl.innerHTML = t('radioTileLimitExceeded', { n: msg.count || MAX_TILES_LIMIT });
     } else {
       statsEl.innerHTML = t('radioAborted') + ': ' + sanitize(msg.message);
     }
-    statsEl.hidden = false;
+    statsPanelEl.hidden = false;
     clearBtnEl.hidden = false;
 
     if (radioState.worker) {
@@ -262,7 +346,7 @@
     radioState.lng = null;
 
     if (radioState.marker) {
-      getMap().removeLayer(radioState.marker);
+      radioState.map.removeLayer(radioState.marker);
       radioState.marker = null;
     }
     removeOverlay();
@@ -271,28 +355,24 @@
     instructionEl.hidden = false;
     analyzeBtnEl.disabled = true;
     clearBtnEl.hidden = true;
-    progressEl.hidden = true;
-    statsEl.hidden = true;
+    progressOverlayEl.hidden = true;
+    statsPanelEl.hidden = true;
     progressBarEl.style.width = '0%';
   }
 
   function removeOverlay() {
     if (radioState.canvasLayer) {
-      getMap().removeLayer(radioState.canvasLayer);
+      radioState.map.removeLayer(radioState.canvasLayer);
       radioState.canvasLayer = null;
     }
   }
 
   // ===== Canvas Coverage Layer =====
-  // Custom Leaflet layer that accumulates visible coverage points and renders
-  // them as filled rectangles on a canvas. Uses an offscreen buffer keyed by
-  // pixel coordinates to avoid re-projecting every point on every render.
   var RadioCoverageLayer = L.Layer.extend({
     initialize: function () {
-      this._points = []; // [[lat, lng], ...]
+      this._points = [];
       this._canvas = null;
       this._ctx = null;
-      this._dirty = false;
     },
 
     onAdd: function (map) {
@@ -345,7 +425,6 @@
       this._points.push([lat, lng]);
     },
 
-    // Incremental render: only draw newly added points
     renderIncremental: function (startIdx) {
       if (!this._ctx || !this._map) return;
       var ctx = this._ctx;
@@ -367,7 +446,6 @@
       }
     },
 
-    // Full redraw: clear canvas and re-render all points
     _fullRedraw: function () {
       if (!this._ctx || !this._map || !this._canvas) return;
       this._repositionCanvas();
@@ -379,11 +457,6 @@
   });
 
   // ===== Utility =====
-  function getMap() {
-    // Access the shared map from app.js
-    return window._worldToolkitMap;
-  }
-
   function clampNumber(val, min, max, fallback) {
     var n = parseFloat(val);
     if (isNaN(n)) return fallback;
