@@ -127,7 +127,7 @@
 
   function invalidateMap() {
     if (radioState.map) {
-      setTimeout(function () { radioState.map.invalidateSize(); }, 50);
+      radioState.map.invalidateSize();
     }
   }
 

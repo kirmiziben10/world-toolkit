@@ -726,7 +726,13 @@ function initButtons() {
     } else {
       win.style.zIndex = getTopZ();
     }
-    if (window.RadioReach) window.RadioReach.invalidateMap();
+    if (window.RadioReach) {
+      window.RadioReach.invalidateMap();
+      // Also invalidate after open animation finishes
+      win.addEventListener('animationend', function () {
+        window.RadioReach.invalidateMap();
+      }, { once: true });
+    }
   });
 
   // Close secondary windows
@@ -1002,6 +1008,7 @@ function initMaximize(winId, btnId) {
     let rafId;
     function tickResize() {
       if (state.map) state.map.invalidateSize({ animate: false });
+      if (winId === 'radio-window' && window.RadioReach) window.RadioReach.invalidateMap();
       rafId = requestAnimationFrame(tickResize);
     }
     rafId = requestAnimationFrame(tickResize);
@@ -1009,6 +1016,7 @@ function initMaximize(winId, btnId) {
       cancelAnimationFrame(rafId);
       win.classList.remove('win-maximizing');
       if (state.map) state.map.invalidateSize();
+      if (winId === 'radio-window' && window.RadioReach) window.RadioReach.invalidateMap();
     }, { once: true });
   });
 }
@@ -1204,6 +1212,7 @@ function initXpWindow(winId, titlebarId) {
     win.style.height = Math.max(minH, newH) + 'px';
     win.style.left = newLeft + 'px';
     win.style.top  = newTop  + 'px';
+    if (winId === 'radio-window' && window.RadioReach) window.RadioReach.invalidateMap();
   });
 
   document.addEventListener('mouseup', () => {
