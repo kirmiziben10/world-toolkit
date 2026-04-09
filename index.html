@@ -41,6 +41,10 @@
       <img src="assets/rocky_icon.svg" alt="Rocky" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="rocky">Rocky</span>
     </div>
+    <div class="desktop-icon" id="icon-radio-reach" title="Radio Reach" data-i18n-attr="title:radioReach">
+      <img src="assets/radio_icon.svg" alt="Radio" class="desktop-icon-img">
+      <span class="desktop-icon-label" data-i18n="radioReach">Radio Reach</span>
+    </div>
   </div>
 
   <!-- Leaflet trash menu -->
@@ -285,6 +289,85 @@
     <div id="help-tooltip-footer" class="help-tooltip-footer" hidden></div>
   </div>
 
+  <!-- Radio Reach Window -->
+  <div id="radio-window" class="xp-window" hidden>
+    <div id="radio-window-titlebar" class="window-titlebar">
+      <div class="titlebar-leading">
+        <img src="assets/radio_icon.svg" alt="" class="titlebar-icon">
+        <span class="titlebar-text" data-i18n="radioReachTitle">Radio Reach</span>
+      </div>
+      <div class="titlebar-trailing">
+        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-radio" title="Maximize" data-i18n-attr="title:maximize">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
+          </svg>
+        </button>
+        <button class="titlebar-btn" id="btn-close-radio" title="Close" data-i18n-attr="title:close">
+          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        </button>
+      </div>
+    </div>
+    <div class="window-border window-border-left"></div>
+    <div class="window-border window-border-right"></div>
+    <div class="window-border window-border-bottom"></div>
+    <div class="resize-handle resize-n"></div>
+    <div class="resize-handle resize-s"></div>
+    <div class="resize-handle resize-e"></div>
+    <div class="resize-handle resize-w"></div>
+    <div class="resize-handle resize-ne"></div>
+    <div class="resize-handle resize-nw"></div>
+    <div class="resize-handle resize-se"></div>
+    <div class="resize-handle resize-sw"></div>
+    <div class="xp-window-content radio-window-content">
+      <div class="radio-panel">
+        <p class="radio-instruction" id="radio-instruction" data-i18n="radioClickToBegin">Click a point on the map to begin.</p>
+        <p class="radio-coords" id="radio-coords" hidden></p>
+
+        <div class="radio-controls">
+          <div class="radio-field">
+            <label for="radio-antenna-height" data-i18n="radioAntennaHeight">Antenna Height</label>
+            <div class="radio-input-row">
+              <input type="number" id="radio-antenna-height" min="0" max="500" value="10" step="1">
+              <span class="radio-unit">m</span>
+            </div>
+          </div>
+
+          <div class="radio-field">
+            <label for="radio-radius" data-i18n="radioAnalysisRadius">Analysis Radius</label>
+            <div class="radio-input-row">
+              <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
+              <span class="radio-unit">km</span>
+            </div>
+          </div>
+
+          <div class="radio-field">
+            <label for="radio-frequency" data-i18n="radioFrequency">Frequency</label>
+            <select id="radio-frequency">
+              <option value="14" data-i18n="radioFreqHF">HF 14 MHz</option>
+              <option value="144" selected data-i18n="radioFreqVHF">VHF 144 MHz</option>
+              <option value="430" data-i18n="radioFreqUHF">UHF 430 MHz</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
+          <span class="btn-text" data-i18n="radioAnalyze">Analyze</span>
+        </button>
+
+        <button id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
+
+        <div id="radio-progress" class="radio-progress" hidden>
+          <div class="progress-track">
+            <div id="radio-progress-bar" class="progress-fill"></div>
+          </div>
+          <p id="radio-progress-text" class="radio-progress-text"></p>
+        </div>
+
+        <div id="radio-stats" class="radio-stats" hidden></div>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       if (window.innerWidth <= 600) {
@@ -292,7 +375,7 @@
         document.getElementById('main-window').hidden = true;
         return;
       }
-      ['main-window', 'loved-window', 'starred-window'].forEach(function (id) {
+      ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(function (id) {
         var raw = localStorage.getItem('sv_layout_' + id);
         if (!raw) return;
         try {
@@ -320,6 +403,7 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="terrain-tiles.js"></script>
   <script src="app.js"></script>
+  <script src="radio-reach.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
   <script src="globe.js"></script>
   <script src="vendor/desktop-buddy/desktop-buddy.iife.js"></script>

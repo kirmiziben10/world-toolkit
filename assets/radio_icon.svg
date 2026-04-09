@@ -1,0 +1,38 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Outer border (matching other icons) -->
+<rect x="1.5" y="1.5" width="45" height="45" rx="2" stroke="#5F6A5E" stroke-linejoin="round"/>
+<rect x="4.5" y="4.5" width="39" height="39" stroke="white" stroke-opacity="0.66"/>
+<!-- Background gradient (sky blue) -->
+<rect x="5" y="5" width="38" height="38" fill="url(#bg)"/>
+<!-- Ground -->
+<rect x="5" y="36" width="38" height="7" fill="url(#ground)"/>
+<!-- Tower base (triangle structure) -->
+<path d="M24 8L18 36H20L24 12L28 36H30L24 8Z" fill="#666" stroke="#444" stroke-width="0.5"/>
+<!-- Cross braces -->
+<line x1="20.5" y1="20" x2="27.5" y2="24" stroke="#555" stroke-width="0.8"/>
+<line x1="27.5" y1="20" x2="20.5" y2="24" stroke="#555" stroke-width="0.8"/>
+<line x1="20" y1="28" x2="28" y2="32" stroke="#555" stroke-width="0.8"/>
+<line x1="28" y1="28" x2="20" y2="32" stroke="#555" stroke-width="0.8"/>
+<!-- Antenna tip -->
+<line x1="24" y1="8" x2="24" y2="6" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="24" cy="6" r="1.2" fill="#E22020"/>
+<!-- Signal waves (left) -->
+<path d="M18 12C16 10 14 11 13 13" stroke="#09ACE2" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.7"/>
+<path d="M16 10C13 7 10 9 8 12" stroke="#09ACE2" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.45"/>
+<!-- Signal waves (right) -->
+<path d="M30 12C32 10 34 11 35 13" stroke="#09ACE2" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.7"/>
+<path d="M32 10C35 7 38 9 40 12" stroke="#09ACE2" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.45"/>
+<!-- Base platform -->
+<rect x="17" y="35" width="14" height="2" rx="0.5" fill="#888" stroke="#666" stroke-width="0.5"/>
+<defs>
+  <linearGradient id="bg" x1="24" y1="5" x2="24" y2="43" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#A8DCF0"/>
+    <stop offset="0.7" stop-color="#78C4E0"/>
+    <stop offset="1" stop-color="#4AA8C8"/>
+  </linearGradient>
+  <linearGradient id="ground" x1="24" y1="36" x2="24" y2="43" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#6BB55A"/>
+    <stop offset="1" stop-color="#4A8A3A"/>
+  </linearGradient>
+</defs>
+</svg>

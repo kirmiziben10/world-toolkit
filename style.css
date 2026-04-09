@@ -1629,6 +1629,129 @@ a.action-btn {
   background: none;
 }
 
+/* ===== Radio Reach Window ===== */
+.radio-window-content {
+  padding: 0;
+}
+
+.radio-panel {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.radio-instruction {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.radio-coords {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dark);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(9, 172, 226, 0.08);
+  border: 1px solid rgba(9, 172, 226, 0.18);
+}
+.radio-coords[hidden] { display: none; }
+
+.radio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.radio-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dark);
+}
+
+.radio-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.radio-input-row input[type="number"],
+.radio-field select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #E1CC94;
+  border-radius: 4px;
+  background: #F8F5EB;
+  font-family: var(--font-main);
+  font-size: 13px;
+  color: var(--text-dark);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.radio-input-row input[type="number"]:focus,
+.radio-field select:focus {
+  border-color: var(--accent-blue);
+}
+
+.radio-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+.radio-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.radio-progress[hidden] { display: none; }
+
+.radio-progress-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.radio-stats {
+  font-size: 12px;
+  color: var(--text-dark);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(9, 172, 226, 0.06);
+  border: 1px solid rgba(9, 172, 226, 0.15);
+  line-height: 1.6;
+}
+.radio-stats[hidden] { display: none; }
+
+/* Radio Reach transmitter marker */
+.radio-tx-marker {
+  background: none !important;
+  border: none !important;
+}
+.radio-tx-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ff6b6b, #e22020);
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(226, 32, 32, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Radio coverage canvas overlay */
+.radio-coverage-canvas {
+  opacity: 0.9;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 900px) and (min-width: 601px) {
   #main-window {

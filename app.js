@@ -130,7 +130,12 @@ function init() {
     initWindowResize();
     initXpWindow('loved-window', 'loved-window-titlebar');
     initXpWindow('starred-window', 'starred-window-titlebar');
+    initXpWindow('radio-window', 'radio-window-titlebar');
   }
+
+  // Init Radio Reach companion app
+  if (window.RadioReach) window.RadioReach.init();
+
   // Globe widget → map navigation
   document.addEventListener('globe-navigate', (e) => {
     if (state.map) state.map.flyTo([e.detail.lat, e.detail.lng], 6, { duration: 1.5 });
@@ -151,6 +156,9 @@ function initMap() {
     zoom: DEFAULT_ZOOM,
     zoomControl: false,
   });
+
+  // Expose map for companion apps (Radio Reach etc.)
+  window._worldToolkitMap = state.map;
 
   // Standard OSM base layer (fits the XP/7 light theme)
   const osm = L.tileLayer(
@@ -224,6 +232,13 @@ function initMap() {
     localStorage.setItem('sv_map_view', JSON.stringify({
       lat: c.lat, lng: c.lng, zoom: state.map.getZoom(),
     }));
+  });
+
+  // Route map clicks to Radio Reach when it's active
+  state.map.on('click', (e) => {
+    if (window.RadioReach && window.RadioReach.isActive()) {
+      window.RadioReach.handleMapClick(e.latlng, state.map);
+    }
   });
 }
 
@@ -695,6 +710,34 @@ function initButtons() {
     openSavedPanel('starred');
   });
 
+  // Desktop icon: Radio Reach
+  document.getElementById('icon-radio-reach').addEventListener('click', () => {
+    iconPop(document.getElementById('icon-radio-reach'));
+    const win = document.getElementById('radio-window');
+    if (win.hidden) {
+      if (!IS_MOBILE) {
+        const saved = loadWindowLayout('radio-window');
+        if (saved) {
+          win.style.top    = saved.top    + 'px';
+          win.style.left   = saved.left   + 'px';
+          win.style.width  = saved.width  + 'px';
+          win.style.height = saved.height + 'px';
+        } else {
+          win.style.top = '120px';
+          win.style.left = 'calc(50% - 160px)';
+          win.style.width = '320px';
+          win.style.height = '520px';
+        }
+      }
+      win.hidden = false;
+      win.style.zIndex = getTopZ();
+      openWindow(win, document.getElementById('icon-radio-reach'));
+    } else {
+      win.style.zIndex = getTopZ();
+    }
+    if (window.RadioReach) window.RadioReach.setActive(true);
+  });
+
   // Close secondary windows
   document.getElementById('btn-close-loved').addEventListener('click', () => {
     closeWindow(document.getElementById('loved-window'), document.getElementById('icon-loved-spots'));
@@ -702,16 +745,21 @@ function initButtons() {
   document.getElementById('btn-close-starred').addEventListener('click', () => {
     closeWindow(document.getElementById('starred-window'), document.getElementById('icon-starred-spots'));
   });
+  document.getElementById('btn-close-radio').addEventListener('click', () => {
+    closeWindow(document.getElementById('radio-window'), document.getElementById('icon-radio-reach'));
+    if (window.RadioReach) window.RadioReach.setActive(false);
+  });
 
   // Maximize buttons (desktop only)
   if (!IS_MOBILE) {
     initMaximize('main-window',    'btn-maximize-main');
     initMaximize('loved-window',   'btn-maximize-loved');
     initMaximize('starred-window', 'btn-maximize-starred');
+    initMaximize('radio-window',   'btn-maximize-radio');
   }
 
   // Bring any window to front on click
-  ['main-window', 'loved-window', 'starred-window'].forEach(id => {
+  ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(id => {
     document.getElementById(id).addEventListener('mousedown', () => {
       document.getElementById(id).style.zIndex = getTopZ();
     });
@@ -759,6 +807,7 @@ const ICON_MAP = {
   'main-window':    'icon-search-spots',
   'loved-window':   'icon-loved-spots',
   'starred-window': 'icon-starred-spots',
+  'radio-window':   'icon-radio-reach',
 };
 
 function openWindow(winEl, iconEl) {
