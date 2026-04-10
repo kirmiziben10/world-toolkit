@@ -139,5 +139,6 @@
   "radioCellsEvaluated": "Değerlendirilen hücre: {{n}}",
   "radioTilesUsed": "Kullanılan karo: {{n}}",
   "radioTileLimitExceeded": "Karo limiti aşıldı ({{n}} karo). Daha küçük bir yarıçap deneyin.",
-  "radioAborted": "Analiz iptal edildi"
+  "radioAborted": "Analiz iptal edildi",
+  "skipTutorial": "Eğitimi atla"
 }

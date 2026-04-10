@@ -17,6 +17,7 @@
   var steps = [];
   var currentStep = -1;
   var active = false;
+  var activeBranch = null; // set by 'branch' wait type
   var buddyRef = null; // set by start()
   var highlightEl = null;
   var skipBtnEl = null;
@@ -48,6 +49,8 @@
           wait: null,
           mobileOnly: false,
           desktopOnly: false,
+          branchOnly: null,
+          branches: [],
           arm: 'right',
           dialogue: null,
           reminders: [],
@@ -68,6 +71,17 @@
         else if (key === 'mobile-only') step.mobileOnly = val === 'true';
         else if (key === 'desktop-only') step.desktopOnly = val === 'true';
         else if (key === 'arm') step.arm = val;
+        else if (key === 'branch-only') step.branchOnly = val;
+        else if (key === 'branch') {
+          var bParts = val.split(/\s+/);
+          if (bParts.length >= 3) {
+            step.branches.push({
+              event: bParts[0],
+              selector: bParts[1],
+              name: bParts.slice(2).join(' '),
+            });
+          }
+        }
         else if (key === 'timeout') {
           // Next dialogue line(s) are reminders at this timeout
           step.reminders.push({ seconds: parseInt(val, 10), text: null });
@@ -143,7 +157,7 @@
     if (skipBtnEl) return;
     skipBtnEl = document.createElement('button');
     skipBtnEl.className = 'tutorial-skip-btn';
-    skipBtnEl.textContent = 'Skip tutorial';
+    skipBtnEl.textContent = window.i18n ? window.i18n.t('skipTutorial') : 'Skip tutorial';
     skipBtnEl.addEventListener('click', function () {
       window.Tutorial.skip();
     });
@@ -237,6 +251,7 @@
   function shouldRunStep(step) {
     if (step.mobileOnly && !isMobile) return false;
     if (step.desktopOnly && isMobile) return false;
+    if (step.branchOnly && step.branchOnly !== activeBranch) return false;
     return true;
   }
 
@@ -262,11 +277,11 @@
       positionHighlight(targetEl);
     }
 
-    // Point arm at target
+    // Point arm at middle of bottom edge of target
     if (buddyRef && targetEl) {
       var rect = targetEl.getBoundingClientRect();
       var cx = rect.left + rect.width / 2;
-      var cy = rect.top + rect.height / 2;
+      var cy = rect.bottom;
       buddyRef.controller.pointAt(cx, cy, step.arm);
     }
 
@@ -286,7 +301,7 @@
           var r = el.getBoundingClientRect();
           buddyRef.controller.pointAt(
             r.left + r.width / 2,
-            r.top + r.height / 2,
+            r.bottom,
             step.arm
           );
         }
@@ -329,6 +344,34 @@
         case 'visible':
           waitCleanup = waitForVisible(step.wait.arg, onDone);
           break;
+        case 'delay':
+          var delayMs = parseInt(step.wait.arg, 10) * 1000;
+          var delayTid = setTimeout(onDone, delayMs);
+          timeoutIds.push(delayTid);
+          waitCleanup = function () { clearTimeout(delayTid); };
+          break;
+        case 'branch':
+          var branchCleanups = [];
+          step.branches.forEach(function (b) {
+            var el = document.querySelector(b.selector);
+            if (!el) return;
+            function handler() {
+              activeBranch = b.name;
+              // Clean up all other branch listeners
+              branchCleanups.forEach(function (fn) { fn(); });
+              branchCleanups = [];
+              onDone();
+            }
+            el.addEventListener(b.event, handler, { once: true });
+            branchCleanups.push(function () {
+              el.removeEventListener(b.event, handler);
+            });
+          });
+          waitCleanup = function () {
+            branchCleanups.forEach(function (fn) { fn(); });
+            branchCleanups = [];
+          };
+          break;
       }
     }
   }
@@ -370,6 +413,7 @@
     if (active) return;
     buddyRef = buddy;
     active = true;
+    activeBranch = null;
 
     var activeLang = window.getCurrentLang ? window.getCurrentLang() : 'en';
     var scriptUrl = 'scripts/rocky-tutorial.' + activeLang + '.md';

@@ -48,9 +48,18 @@
     window.getCurrentLang = getCurrentLang;
 
     // --- Init ---
+    function resolveBuddyMode() {
+      if (IS_MOBILE) return 'miniature';
+      var isFirstVisit = localStorage.getItem('sv_tutorial_done') !== 'true';
+      if (isFirstVisit) return 'full';
+      var saved = localStorage.getItem('sv_buddy_mode');
+      if (saved === 'miniature' || saved === 'full') return saved;
+      return 'full';
+    }
+
     function initBuddy() {
       var lang = getCurrentLang();
-      var buddyMode = IS_MOBILE ? 'miniature' : 'full';
+      var buddyMode = resolveBuddyMode();
       buddy = window.DesktopBuddy.init({
         scriptUrl: 'scripts/rocky-terrain.' + lang + '.md',
         startSequence: window.Tutorial && window.Tutorial.shouldRun() ? undefined : 'welcome',
@@ -58,6 +67,14 @@
         x: IS_MOBILE ? window.innerWidth - 60 : window.innerWidth - 120,
         y: IS_MOBILE ? window.innerHeight - 50 : undefined,
       });
+      // Intercept mode changes (e.g. from radial menu) to persist
+      if (!IS_MOBILE) {
+        var _origSetMode = buddy.controller.setMode.bind(buddy.controller);
+        buddy.controller.setMode = function (mode) {
+          _origSetMode(mode);
+          localStorage.setItem('sv_buddy_mode', mode);
+        };
+      }
       document.addEventListener('pointerdown', resetActivity);
       document.addEventListener('keydown', resetActivity);
       startIdleTimer();

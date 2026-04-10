@@ -2,23 +2,29 @@
 
 <!-- tutorial: onboarding -->
 
-## Adım 1: Uygulamayı aç
-<!-- target: #icon-search-spots -->
-<!-- target-mobile: #icon-search-spots -->
-<!-- wait: visible #main-window:not([hidden]) -->
+## Adım 0: Tanışma
+<!-- wait: delay 10 -->
+> {color:cyan}Merhaba!{/color} Ben {bold}Rocky{/bold}, arazi arkadaşın! {shake}Tanıştığıma memnun oldum!{/shake} Dünyanın en güzel noktalarını keşfetmende sana yardım edeceğim!
+
+## Adım 1: Program seç
+<!-- target: #desktop-icons -->
+<!-- wait: branch -->
+<!-- branch: click #icon-search-spots search -->
+<!-- branch: click #icon-radio-reach radio -->
 <!-- arm: right -->
-> {color:cyan}Hoş geldin!{/color} Bu uygulama gerçek yükseklik verileriyle dağ manzaralı muhteşem seyir noktalarını buluyor — haritadan bir alan seç, ben de araziyi analiz edeyim! Başlamak için bu ikona {bold}çift tıkla{/bold}!
+> Önce hangi uygulamayı öğrenmek istersin? {bold}Nokta Ara{/bold} dağ manzaralı seyir noktaları buluyor, {bold}Radyo Menzili{/bold} ise radyo sinyal kapsama alanını haritalıyor. {color:green}Bir ikona tıkla{/color} ve seç!
 
 <!-- timeout: 15 -->
-> O ikona {bold}çift tıkla{/bold} ve birlikte harika yerler keşfedelim!
+> Başlamak için {bold}Nokta Ara{/bold} ya da {bold}Radyo Menzili{/bold}'ne tıkla!
 
 <!-- timeout: 30 -->
-> Hadi, bir dene! Doğrudan orayı işaret ediyorum!
+> Hadi birini seç! Eğitimi daha sonra istediğin zaman tekrar edebilirsin!
 
 <!-- timeout: 50 -->
 > {shake}Gerekirse bütün gün beklerim!{/shake}
 
 ## Adım 2: Dikdörtgen çiz
+<!-- branch-only: search -->
 <!-- target: .leaflet-draw-draw-rectangle -->
 <!-- target-mobile: .leaflet-draw-draw-rectangle -->
 <!-- wait: custom wt:rectangle-drawn -->
@@ -32,6 +38,7 @@
 > Herhangi bir yere bir dikdörtgen çizmen yeterli — daha sonra her zaman baştan yapabilirsin!
 
 ## Adım 3: Analiz et
+<!-- branch-only: search -->
 <!-- mobile-only: true -->
 <!-- target-mobile: #controls-toggle -->
 <!-- wait: click #controls-toggle -->
@@ -42,6 +49,7 @@
 > Filtreleri dışarı kaydırmak için bu oka dokun.
 
 ## Adım 4: Analiz et
+<!-- branch-only: search -->
 <!-- target: #analyze-btn -->
 <!-- target-mobile: #analyze-btn -->
 <!-- wait: click #analyze-btn -->
@@ -52,6 +60,7 @@
 > Şuradaki büyük düğme — ona bir kez tıkla!
 
 ## Adım 5: Sonuçları gör
+<!-- branch-only: search -->
 <!-- target: .result-card -->
 <!-- target-mobile: .result-card -->
 <!-- wait: visible .result-card -->
@@ -59,6 +68,7 @@
 > {rainbow}Güzel!{/rainbow} Bunlar senin manzara noktaların! Haritada görmek için herhangi bir karta tıkla!
 
 ## Adım 6: Filtreleri kapat
+<!-- branch-only: search -->
 <!-- mobile-only: true -->
 <!-- target-mobile: #controls-toggle -->
 <!-- wait: click #controls-toggle -->
@@ -67,3 +77,8 @@
 
 <!-- timeout: 12 -->
 > Paneli geri gizle ki harita ve sonuç listesi daha geniş görünsün.
+
+## Adım 7: Radyo Menzili yer tutucu
+<!-- branch-only: radio -->
+<!-- wait: delay 10 -->
+> {bold}Radyo Menzili{/bold} eğitimi yakında geliyor! Şimdilik kendi başına keşfet — {color:green}haritaya tıkla{/color} ve bir verici yerleştir, ayarları yap ve {bold}Analiz Et{/bold}'e bas!

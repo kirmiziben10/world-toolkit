@@ -64,7 +64,7 @@
   <div id="globe-attribution" class="globe-attribution"></div>
 
   <!-- Main Window -->
-  <div id="main-window">
+  <div id="main-window" hidden>
     <!-- Titlebar -->
     <div id="window-titlebar">
       <div class="titlebar-leading">
@@ -426,18 +426,33 @@
         document.getElementById('main-window').hidden = true;
         return;
       }
+      var isFirstVisit = localStorage.getItem('sv_tutorial_done') !== 'true';
       ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        // Restore layout position/size
         var raw = localStorage.getItem('sv_layout_' + id);
-        if (!raw) return;
-        try {
-          var l = JSON.parse(raw);
-          var el = document.getElementById(id);
-          if (!el) return;
-          el.style.top    = l.top    + 'px';
-          el.style.left   = l.left   + 'px';
-          el.style.width  = l.width  + 'px';
-          el.style.height = l.height + 'px';
-        } catch (e) {}
+        if (raw) {
+          try {
+            var l = JSON.parse(raw);
+            el.style.top    = l.top    + 'px';
+            el.style.left   = l.left   + 'px';
+            el.style.width  = l.width  + 'px';
+            el.style.height = l.height + 'px';
+          } catch (e) {}
+        }
+        // Restore open/close state (on first visit, all windows start closed)
+        if (isFirstVisit) {
+          el.hidden = true;
+        } else {
+          var openState = localStorage.getItem('sv_win_open_' + id);
+          if (openState !== null) {
+            el.hidden = openState !== 'true';
+          } else {
+            // Default: main-window open, others closed
+            el.hidden = id !== 'main-window';
+          }
+        }
       });
     })();
   </script>

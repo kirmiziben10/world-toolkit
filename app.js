@@ -134,7 +134,13 @@ function init() {
   }
 
   // Init Radio Reach companion app
-  if (window.RadioReach) window.RadioReach.init();
+  if (window.RadioReach) {
+    window.RadioReach.init();
+    // If radio window was restored as open, invalidate map after layout settles
+    if (!document.getElementById('radio-window').hidden) {
+      setTimeout(() => window.RadioReach.invalidateMap(), 400);
+    }
+  }
 
   // Globe widget → map navigation
   document.addEventListener('globe-navigate', (e) => {
@@ -807,6 +813,7 @@ const ICON_MAP = {
 };
 
 function openWindow(winEl, iconEl) {
+  if (!IS_MOBILE) localStorage.setItem('sv_win_open_' + winEl.id, 'true');
   if (IS_MOBILE) {
     winEl.classList.remove('win-closing');
     winEl.classList.add('win-opening');
@@ -837,6 +844,10 @@ function openWindow(winEl, iconEl) {
 
 function closeWindow(winEl, iconEl) {
   if (winEl.hidden) return;
+  if (!IS_MOBILE) {
+    localStorage.setItem('sv_win_open_' + winEl.id, 'false');
+    saveWindowLayout(winEl.id);
+  }
   if (IS_MOBILE) {
     winEl.classList.remove('win-opening');
     winEl.classList.add('win-closing');

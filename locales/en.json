@@ -139,5 +139,6 @@
   "radioCellsEvaluated": "Cells evaluated: {{n}}",
   "radioTilesUsed": "Tiles used: {{n}}",
   "radioTileLimitExceeded": "Tile limit exceeded ({{n}} tiles). Try a smaller radius.",
-  "radioAborted": "Analysis aborted"
+  "radioAborted": "Analysis aborted",
+  "skipTutorial": "Skip tutorial"
 }
