@@ -138,6 +138,7 @@
   "radioMarginalArea": "Zayıf kapsama: {{km2}} km\u00b2",
   "radioCellsEvaluated": "Değerlendirilen hücre: {{n}}",
   "radioTilesUsed": "Kullanılan karo: {{n}}",
+  "radioWorkerCount": "{{n}} iş parçacığıyla değerlendirildi",
   "radioTileLimitExceeded": "Karo limiti aşıldı ({{n}} karo). Daha küçük bir yarıçap deneyin.",
   "radioAborted": "Analiz iptal edildi",
   "radioClampedNotice": "({{km}} km ile sınırlandı — bu güç/frekansta mümkün olan maksimum)",

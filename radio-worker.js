@@ -1,7 +1,8 @@
-// ===== Radio Propagation Worker (3-Phase ITM Pipeline) =====
+// ===== Radio Propagation Worker (Orchestrator) =====
 // Phase 1: Geometric LOS pre-filter (silent — no rendering)
 // Phase 2: Evaluation mask with dilation buffer
-// Phase 3: Longley-Rice ITM path loss on mask cells
+// Phase 3: Partitions mask cells into angular slices and delegates
+//          to propagation workers spawned by the main thread
 importScripts('terrain-tiles.js');
 importScripts('vendor/itm/itm.js');
 importScripts('vendor/itm/itm-wrapper.js');
@@ -445,168 +446,59 @@ function dilateMask(mask, w, h, radius) {
   }
 }
 
-// ===== Phase 3: Longley-Rice ITM on mask cells =====
+// ===== Phase 3: Partition mask cells and delegate to propagation workers =====
+// Instead of evaluating ITM here, we collect all 1-cells from the mask,
+// partition them by angular slice around the TX, and send them to the main
+// thread which spawns dedicated propagation workers.
+
+var SLICE_COUNT = 4;  // angular partitions (0-90°, 90-180°, 180-270°, 270-360°)
 
 function runPhase3(mask, mw, mh, totalCells) {
-  var txPowerDbW = 10 * Math.log10(txPowerW);
-  var txGainDbi = 0;
-  var rxGainDbi = 0;
+  // Compute TX position in mask pixel space
+  var txPxX = lngToGlobalPixelX(txLng) - maskOriginGlobalX;
+  var txPxY = latToGlobalPixelY(txLat) - maskOriginGlobalY;
 
-  var evaluated = 0;
-  var batchCells = [];
-  var strongCount = 0, usableCount = 0, marginalCount = 0;
-  var maxReachM = 0;
+  // Collect all 1-cells and assign to angular slices
+  var slices = [];
+  for (var s = 0; s < SLICE_COUNT; s++) slices.push([]);
 
-  var chunksX = Math.ceil(mw / CHUNK_SIZE);
-  var chunksY = Math.ceil(mh / CHUNK_SIZE);
-  var totalChunks = chunksX * chunksY;
-  var chunkIndex = 0;
+  var sliceAngle = (2 * Math.PI) / SLICE_COUNT;
 
-  function processNextChunk() {
-    if (chunkIndex >= totalChunks) {
-      // Flush remaining batch
-      if (batchCells.length > 0) {
-        self.postMessage({
-          type: 'coverageBatch', cells: batchCells,
-          progress: 1.0, evaluated: evaluated
-        });
-      }
-      self.postMessage({ type: 'done', stats: {
-        tilesUsed: tilesUsed,
-        cellsEvaluated: evaluated,
-        strongCount: strongCount,
-        usableCount: usableCount,
-        marginalCount: marginalCount,
-        maxReachM: maxReachM
-      }});
-      return;
-    }
+  for (var py = 0; py < mh; py++) {
+    for (var px = 0; px < mw; px++) {
+      if (!mask[py * mw + px]) continue;
 
-    var cx = chunkIndex % chunksX;
-    var cy = Math.floor(chunkIndex / chunksX);
-    chunkIndex++;
+      var dx = px - txPxX;
+      var dy = py - txPxY;
+      var angle = Math.atan2(dy, dx); // -PI to PI
+      if (angle < 0) angle += 2 * Math.PI; // 0 to 2PI
 
-    // Check if chunk has any set cells
-    var x0 = cx * CHUNK_SIZE;
-    var y0 = cy * CHUNK_SIZE;
-    var x1 = Math.min(x0 + CHUNK_SIZE, mw);
-    var y1 = Math.min(y0 + CHUNK_SIZE, mh);
+      var sliceIdx = Math.floor(angle / sliceAngle);
+      if (sliceIdx >= SLICE_COUNT) sliceIdx = SLICE_COUNT - 1;
 
-    var hasAnyCells = false;
-    for (var py = y0; py < y1 && !hasAnyCells; py++) {
-      for (var px = x0; px < x1 && !hasAnyCells; px++) {
-        if (mask[py * mw + px]) hasAnyCells = true;
-      }
-    }
-    if (!hasAnyCells) {
-      setTimeout(processNextChunk, 0);
-      return;
-    }
-
-    // Collect tiles needed: bbox of (TX, chunk corners)
-    var neededTiles = collectChunkTiles(x0, y0, x1, y1);
-
-    requestTilesAndRun(neededTiles, function () {
-      evaluateChunk(mask, mw, x0, y0, x1, y1,
-        txPowerDbW, txGainDbi, rxGainDbi);
-      setTimeout(processNextChunk, 0);
-    });
-  }
-
-  function evaluateChunk(mask, mw, x0, y0, x1, y1,
-                         txPowerDbW, txGainDbi, rxGainDbi) {
-    for (var py = y0; py < y1; py++) {
-      for (var px = x0; px < x1; px++) {
-        if (!mask[py * mw + px]) continue;
-
-        var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
-        var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
-
-        // Build elevation profile TX → cell
-        var profile = buildProfile(txLat, txLng, cellLat, cellLng);
-        if (!profile) continue;
-
-        // Call ITM
-        var pathLoss;
-        try {
-          pathLoss = self.computeITMPathLoss(
-            profile, mpp, antennaHeight, RX_HEIGHT_M, freqMHz
-          );
-        } catch (e) {
-          continue;
-        }
-
-        // Signal margin
-        var margin = txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
-
-        var band;
-        if (margin > 20)      { band = 0; strongCount++; }
-        else if (margin >= 5) { band = 1; usableCount++; }
-        else if (margin >= 0) { band = 2; marginalCount++; }
-        else continue; // unreachable
-
-        var distM = haversineDistance(txLat, txLng, cellLat, cellLng);
-        if (distM > maxReachM) maxReachM = distM;
-
-        evaluated++;
-        batchCells.push({ lat: cellLat, lng: cellLng, band: band });
-
-        if (batchCells.length >= COVERAGE_BATCH_SIZE) {
-          self.postMessage({
-            type: 'coverageBatch', cells: batchCells,
-            progress: evaluated / totalCells, evaluated: evaluated
-          });
-          batchCells = [];
-        }
-      }
+      slices[sliceIdx].push({
+        cellX: px,
+        cellY: py,
+        lat: globalPixelYToLat(maskOriginGlobalY + py),
+        lng: globalPixelXToLng(maskOriginGlobalX + px)
+      });
     }
   }
 
-  processNextChunk();
-}
-
-function collectChunkTiles(x0, y0, x1, y1) {
-  // Convert chunk corners to lat/lng
-  var tlLat = globalPixelYToLat(maskOriginGlobalY + y0);
-  var tlLng = globalPixelXToLng(maskOriginGlobalX + x0);
-  var brLat = globalPixelYToLat(maskOriginGlobalY + y1);
-  var brLng = globalPixelXToLng(maskOriginGlobalX + x1);
-
-  // Bounding box including TX
-  var minLat = Math.min(txLat, tlLat, brLat);
-  var maxLat = Math.max(txLat, tlLat, brLat);
-  var minLng = Math.min(txLng, tlLng, brLng);
-  var maxLng = Math.max(txLng, tlLng, brLng);
-
-  var txMin = lngToTileX(minLng, zoom);
-  var txMax = lngToTileX(maxLng, zoom);
-  var tyMin = latToTileY(maxLat, zoom); // maxLat → smaller tile Y
-  var tyMax = latToTileY(minLat, zoom);
-
-  var tiles = [];
-  for (var ty = tyMin; ty <= tyMax; ty++) {
-    for (var tx = txMin; tx <= txMax; tx++) {
-      tiles.push({ z: zoom, x: tx, y: ty });
-    }
-  }
-  return tiles;
-}
-
-function buildProfile(lat1, lng1, lat2, lng2) {
-  var distM = haversineDistance(lat1, lng1, lat2, lng2);
-  if (distM < mpp) return null; // too close
-
-  var nSamples = Math.max(2, Math.round(distM / mpp));
-  var profile = new Float32Array(nSamples);
-
-  for (var i = 0; i < nSamples; i++) {
-    var frac = i / (nSamples - 1);
-    var lat = lat1 + (lat2 - lat1) * frac;
-    var lng = lng1 + (lng2 - lng1) * frac;
-    var elev = getElevation(lat, lng);
-    if (elev === null) return null;
-    profile[i] = elev;
-  }
-
-  return profile;
+  self.postMessage({
+    type: 'phase3Partition',
+    slices: slices,
+    totalCells: totalCells,
+    txParams: {
+      txLat: txLat,
+      txLng: txLng,
+      txElevation: txElevation,
+      antennaHeight: antennaHeight,
+      freqMHz: freqMHz,
+      txPowerW: txPowerW,
+      zoom: zoom,
+      mpp: mpp
+    },
+    tilesUsed: tilesUsed
+  });
 }

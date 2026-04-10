@@ -12,6 +12,7 @@
   var ANALYSIS_ZOOM = 12;
   var EARTH_RADIUS = 6378137;
   var MAX_TILES_LIMIT = 2000;
+  var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
 
   // Attribution strings
   var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -23,6 +24,7 @@
     lat: null,
     lng: null,
     worker: null,
+    propWorkers: [],
     canvasLayer: null,
     running: false,
   };
@@ -220,15 +222,15 @@
     radioState.worker.onmessage = function (e) {
       var msg = e.data;
       if (msg.type === 'needTiles') {
-        fetchAndSendTiles(msg.tiles);
+        fetchAndSendTiles(msg.tiles, radioState.worker);
       } else if (msg.type === 'phase1Done') {
         handlePhase1Done(msg);
       } else if (msg.type === 'phase2Done') {
         handlePhase2Done(msg);
       } else if (msg.type === 'coverageBounds') {
         handleCoverageBounds(msg);
-      } else if (msg.type === 'coverageBatch') {
-        handleCoverageBatch(msg);
+      } else if (msg.type === 'phase3Partition') {
+        handlePhase3Partition(msg);
       } else if (msg.type === 'done') {
         handleDone(msg.stats);
       } else if (msg.type === 'error') {
@@ -252,7 +254,7 @@
     });
   }
 
-  function fetchAndSendTiles(tiles) {
+  function fetchAndSendTiles(tiles, targetWorker) {
     var promises = tiles.map(function (tc) {
       return getTile(tc.z, tc.x, tc.y).then(function (data) {
         return { z: tc.z, x: tc.x, y: tc.y, data: data };
@@ -262,14 +264,14 @@
     });
 
     Promise.all(promises).then(function (results) {
-      if (!radioState.worker) return;
+      if (!targetWorker) return;
       var transfers = [];
       var tileData = results.map(function (r) {
         var copy = new Float32Array(r.data);
         transfers.push(copy.buffer);
         return { z: r.z, x: r.x, y: r.y, data: copy.buffer };
       });
-      radioState.worker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
+      targetWorker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
       progressTextEl.textContent = t('radioFetchingTiles');
     });
   }
@@ -301,19 +303,142 @@
 
   function handleCoverageBatch(msg) {
     if (!radioState.canvasLayer) return;
-    var pct = 20 + Math.round(msg.progress * 80);
+    var totalEval = radioState._propTotalEvaluated || 0;
+    totalEval += msg.evaluated;
+    // evaluated in msg is slice-local; track cumulative across all slices
+    // We overwrite per-slice tracking below in _propSliceEval
+    var sliceKey = 'slice_' + (msg.sliceId || 0);
+    if (!radioState._propSliceEval) radioState._propSliceEval = {};
+    var prevSliceEval = radioState._propSliceEval[sliceKey] || 0;
+    radioState._propTotalEvaluated = (radioState._propTotalEvaluated || 0) + (msg.evaluated - prevSliceEval);
+    radioState._propSliceEval[sliceKey] = msg.evaluated;
+
+    var totalCells = radioState._totalCells || 1;
+    var pct = 20 + Math.round((radioState._propTotalEvaluated / totalCells) * 80);
+    if (pct > 99) pct = 99;
     progressBarEl.style.width = pct + '%';
     progressTextEl.textContent = t('radioPhase3', {
-      done: msg.evaluated,
-      total: radioState._totalCells || '?'
+      done: radioState._propTotalEvaluated,
+      total: totalCells
     });
 
     var layer = radioState.canvasLayer;
     for (var i = 0; i < msg.cells.length; i++) {
       var c = msg.cells[i];
-      layer.setCellByLatLng(c.lat, c.lng, c.band);
+      // Propagation workers send bitmap pixel coords (cellX, cellY)
+      layer.setCellByBitmapXY(c.cellX, c.cellY, c.band);
     }
     layer.scheduleRefresh();
+  }
+
+  // ===== Phase 3 Partition → Spawn Propagation Workers =====
+  function handlePhase3Partition(msg) {
+    var slices = msg.slices;
+    var txParams = msg.txParams;
+    radioState._propTotalCells = msg.totalCells;
+    radioState._propTotalEvaluated = 0;
+    radioState._propSliceEval = {};
+    radioState._propOrchestratorTiles = msg.tilesUsed;
+    radioState._propWorkerCount = Math.min(PROP_WORKER_COUNT, slices.length);
+
+    // Terminate any lingering propagation workers
+    terminatePropWorkers();
+
+    // Distribute slices round-robin to workers
+    var workerCount = radioState._propWorkerCount;
+    var workerSlices = [];
+    for (var w = 0; w < workerCount; w++) workerSlices.push([]);
+    for (var s = 0; s < slices.length; s++) {
+      workerSlices[s % workerCount].push({ sliceId: s, cells: slices[s] });
+    }
+
+    // Track completion
+    radioState._propSlicesDone = 0;
+    radioState._propTotalSlices = slices.length;
+    radioState._propAggStats = {
+      evaluated: 0,
+      strongCount: 0,
+      usableCount: 0,
+      marginalCount: 0,
+      maxReachM: 0,
+      tilesUsed: msg.tilesUsed // start with orchestrator's tile count
+    };
+
+    // Spawn workers
+    radioState.propWorkers = [];
+    for (var w = 0; w < workerCount; w++) {
+      var pw = new Worker('radio-propagation-worker.js');
+      radioState.propWorkers.push(pw);
+
+      // Set up message handler (closure over pw reference)
+      pw.onmessage = (function (workerRef) {
+        return function (e) {
+          var m = e.data;
+          if (m.type === 'needTiles') {
+            fetchAndSendTiles(m.tiles, workerRef);
+          } else if (m.type === 'coverageBatch') {
+            handleCoverageBatch(m);
+          } else if (m.type === 'sliceDone') {
+            handleSliceDone(m);
+          } else if (m.type === 'error') {
+            handleError(m);
+          }
+        };
+      })(pw);
+
+      pw.onerror = function (err) {
+        handleError({ message: err.message || 'Propagation worker error' });
+      };
+
+      // Post all slices assigned to this worker
+      for (var si = 0; si < workerSlices[w].length; si++) {
+        var assignment = workerSlices[w][si];
+        pw.postMessage({
+          type: 'start',
+          cells: assignment.cells,
+          sliceId: assignment.sliceId,
+          txLat: txParams.txLat,
+          txLng: txParams.txLng,
+          txElevation: txParams.txElevation,
+          antennaHeight: txParams.antennaHeight,
+          freqMHz: txParams.freqMHz,
+          txPowerW: txParams.txPowerW,
+          zoom: txParams.zoom,
+          mpp: txParams.mpp
+        });
+      }
+    }
+  }
+
+  function handleSliceDone(msg) {
+    var agg = radioState._propAggStats;
+    agg.evaluated += msg.stats.evaluated;
+    agg.strongCount += msg.stats.strongCount;
+    agg.usableCount += msg.stats.usableCount;
+    agg.marginalCount += msg.stats.marginalCount;
+    agg.tilesUsed += msg.stats.tilesUsed;
+    if (msg.stats.maxReachM > agg.maxReachM) agg.maxReachM = msg.stats.maxReachM;
+
+    radioState._propSlicesDone++;
+    if (radioState._propSlicesDone >= radioState._propTotalSlices) {
+      // All slices done — finalize
+      handleDone({
+        tilesUsed: agg.tilesUsed,
+        cellsEvaluated: agg.evaluated,
+        strongCount: agg.strongCount,
+        usableCount: agg.usableCount,
+        marginalCount: agg.marginalCount,
+        maxReachM: agg.maxReachM,
+        workerCount: radioState._propWorkerCount
+      });
+    }
+  }
+
+  function terminatePropWorkers() {
+    for (var i = 0; i < radioState.propWorkers.length; i++) {
+      radioState.propWorkers[i].terminate();
+    }
+    radioState.propWorkers = [];
   }
 
   function handleDone(stats) {
@@ -332,12 +457,14 @@
     var strongAreaKm2 = (stats.strongCount * pixelAreaKm2).toFixed(1);
     var usableAreaKm2 = (stats.usableCount * pixelAreaKm2).toFixed(1);
     var marginalAreaKm2 = (stats.marginalCount * pixelAreaKm2).toFixed(1);
+    var workerCount = stats.workerCount || 1;
 
     statsEl.innerHTML =
       '<strong>' + t('radioComplete') + '</strong><br>' +
       t('radioTilesUsed', { n: stats.tilesUsed }) + '<br>' +
       t('radioCellsEvaluated', { n: stats.cellsEvaluated }) + '<br>' +
       t('radioMaxReach', { km: maxReachKm }) + '<br>' +
+      t('radioWorkerCount', { n: workerCount }) + '<br>' +
       '<span class="radio-stat-strong">&#9632;</span> ' + t('radioStrongArea', { km2: strongAreaKm2 }) + '<br>' +
       '<span class="radio-stat-usable">&#9632;</span> ' + t('radioUsableArea', { km2: usableAreaKm2 }) + '<br>' +
       '<span class="radio-stat-marginal">&#9632;</span> ' + t('radioMarginalArea', { km2: marginalAreaKm2 });
@@ -349,6 +476,7 @@
       radioState.worker.terminate();
       radioState.worker = null;
     }
+    terminatePropWorkers();
   }
 
   function handleError(msg) {
@@ -368,6 +496,7 @@
       radioState.worker.terminate();
       radioState.worker = null;
     }
+    terminatePropWorkers();
   }
 
   function clearAll() {
@@ -375,6 +504,7 @@
       radioState.worker.terminate();
       radioState.worker = null;
     }
+    terminatePropWorkers();
     radioState.running = false;
     radioState.lat = null;
     radioState.lng = null;
@@ -484,6 +614,23 @@
       var mercY = _latToMercY(lat);
       var py = Math.round(((this._mercYTop - mercY) / (this._mercYTop - this._mercYBot)) * (this._bitmapH - 1));
 
+      if (px < 0 || px >= this._bitmapW || py < 0 || py >= this._bitmapH) return;
+
+      var idx = py * this._bitmapW + px;
+      this._bandData[idx] = band;
+
+      var rgba = BAND_RGBA[band];
+      var off = idx * 4;
+      this._imageData.data[off]     = rgba[0];
+      this._imageData.data[off + 1] = rgba[1];
+      this._imageData.data[off + 2] = rgba[2];
+      this._imageData.data[off + 3] = rgba[3];
+
+      this._pendingCells++;
+    },
+
+    setCellByBitmapXY: function (px, py, band) {
+      if (!this._imageData) return;
       if (px < 0 || px >= this._bitmapW || py < 0 || py >= this._bitmapH) return;
 
       var idx = py * this._bitmapW + px;

@@ -138,6 +138,7 @@
   "radioMarginalArea": "Marginal coverage: {{km2}} km\u00b2",
   "radioCellsEvaluated": "Cells evaluated: {{n}}",
   "radioTilesUsed": "Tiles used: {{n}}",
+  "radioWorkerCount": "Evaluated with {{n}} workers",
   "radioTileLimitExceeded": "Tile limit exceeded ({{n}} tiles). Try a smaller radius.",
   "radioAborted": "Analysis aborted",
   "radioClampedNotice": "(capped at {{km}} km — max possible at this power/frequency)",
