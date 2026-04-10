@@ -213,6 +213,16 @@ function handleStart(msg) {
         return;
       }
       runPhase2(points, function (mask, mw, mh, totalCells) {
+        // Emit coverage bounds for bitmap layer
+        self.postMessage({
+          type: 'coverageBounds',
+          minLat: globalPixelYToLat(maskOriginGlobalY + mh),
+          maxLat: globalPixelYToLat(maskOriginGlobalY),
+          minLng: globalPixelXToLng(maskOriginGlobalX),
+          maxLng: globalPixelXToLng(maskOriginGlobalX + mw),
+          widthPx: mw,
+          heightPx: mh
+        });
         runPhase3(mask, mw, mh, totalCells);
       });
     });
@@ -312,7 +322,18 @@ function runPhase1(callback) {
 
 // ===== Phase 2: Build evaluation mask =====
 
+function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
+  var marginDb = 10 * Math.log10(txPowerW) + 140;
+  var dKm = Math.pow(10, (marginDb - 32.45 - 20 * Math.log10(freqMHz)) / 20);
+  return dKm * 1000;
+}
+
 function runPhase2(points, callback) {
+  // 0. Compute free-space clamp radius
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var wasClamped = fsMaxM < radiusM;
+  var clampRadiusM = Math.min(radiusM, fsMaxM);
+
   // 1. Compute bounding box of reachable points in global pixel coords
   var minGX = Infinity, maxGX = -Infinity;
   var minGY = Infinity, maxGY = -Infinity;
@@ -332,6 +353,17 @@ function runPhase2(points, callback) {
   maxGX = Math.ceil(maxGX) + bufferPx;
   minGY = Math.floor(minGY) - bufferPx;
   maxGY = Math.ceil(maxGY) + bufferPx;
+
+  // 2b. Shrink bbox to clamp circle if free-space max is smaller than user radius
+  if (wasClamped) {
+    var txGX = lngToGlobalPixelX(txLng);
+    var txGY = latToGlobalPixelY(txLat);
+    var clampPx = Math.ceil(clampRadiusM / mpp) + bufferPx;
+    minGX = Math.max(minGX, Math.floor(txGX) - clampPx);
+    maxGX = Math.min(maxGX, Math.ceil(txGX) + clampPx);
+    minGY = Math.max(minGY, Math.floor(txGY) - clampPx);
+    maxGY = Math.min(maxGY, Math.ceil(txGY) + clampPx);
+  }
 
   maskOriginGlobalX = minGX;
   maskOriginGlobalY = minGY;
@@ -353,7 +385,7 @@ function runPhase2(points, callback) {
   // 5. Dilate mask using separable sliding-window box dilation
   dilateMask(mask, maskW, maskH, bufferPx);
 
-  // 6. Clip to radius circle
+  // 6. Clip to clamped radius circle
   var totalCells = 0;
   for (var py = 0; py < maskH; py++) {
     for (var px = 0; px < maskW; px++) {
@@ -361,7 +393,7 @@ function runPhase2(points, callback) {
       var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
       var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
-      if (dist > radiusM) {
+      if (dist > clampRadiusM) {
         mask[py * maskW + px] = 0;
       } else {
         totalCells++;
@@ -369,7 +401,12 @@ function runPhase2(points, callback) {
     }
   }
 
-  self.postMessage({ type: 'phase2Done', totalCells: totalCells });
+  var phase2Msg = { type: 'phase2Done', totalCells: totalCells };
+  if (wasClamped) {
+    phase2Msg.clampedRadiusKm = clampRadiusM / 1000;
+    phase2Msg.wasClamped = true;
+  }
+  self.postMessage(phase2Msg);
   callback(mask, maskW, maskH, totalCells);
 }
 

@@ -140,5 +140,6 @@
   "radioTilesUsed": "Tiles used: {{n}}",
   "radioTileLimitExceeded": "Tile limit exceeded ({{n}} tiles). Try a smaller radius.",
   "radioAborted": "Analysis aborted",
+  "radioClampedNotice": "(capped at {{km}} km — max possible at this power/frequency)",
   "skipTutorial": "Skip tutorial"
 }

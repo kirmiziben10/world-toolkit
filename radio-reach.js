@@ -225,6 +225,8 @@
         handlePhase1Done(msg);
       } else if (msg.type === 'phase2Done') {
         handlePhase2Done(msg);
+      } else if (msg.type === 'coverageBounds') {
+        handleCoverageBounds(msg);
       } else if (msg.type === 'coverageBatch') {
         handleCoverageBatch(msg);
       } else if (msg.type === 'done') {
@@ -279,7 +281,21 @@
 
   function handlePhase2Done(msg) {
     radioState._totalCells = msg.totalCells;
-    progressTextEl.textContent = t('radioPhase3', { done: 0, total: msg.totalCells });
+    var text = t('radioPhase2');
+    if (msg.wasClamped) {
+      text += ' ' + t('radioClampedNotice', { km: msg.clampedRadiusKm.toFixed(1) });
+    }
+    progressTextEl.textContent = text;
+    progressBarEl.style.width = '15%';
+  }
+
+  function handleCoverageBounds(msg) {
+    if (!radioState.canvasLayer) return;
+    radioState.canvasLayer.initBitmap(
+      msg.minLat, msg.maxLat, msg.minLng, msg.maxLng,
+      msg.widthPx, msg.heightPx
+    );
+    progressTextEl.textContent = t('radioPhase3', { done: 0, total: radioState._totalCells || '?' });
     progressBarEl.style.width = '20%';
   }
 
@@ -293,12 +309,11 @@
     });
 
     var layer = radioState.canvasLayer;
-    var prevLen = layer._points.length;
     for (var i = 0; i < msg.cells.length; i++) {
       var c = msg.cells[i];
-      layer.addPoint(c.lat, c.lng, c.band);
+      layer.setCellByLatLng(c.lat, c.lng, c.band);
     }
-    layer.renderIncremental(prevLen);
+    layer.scheduleRefresh();
   }
 
   function handleDone(stats) {
@@ -306,6 +321,10 @@
     analyzeBtnEl.disabled = false;
     clearBtnEl.hidden = false;
     progressOverlayEl.hidden = true;
+
+    if (radioState.canvasLayer) {
+      radioState.canvasLayer.flushRefresh();
+    }
 
     var maxReachKm = (stats.maxReachM / 1000).toFixed(1);
     var mppVal = metersPerPixel(radioState.lat, ANALYSIS_ZOOM);
@@ -383,102 +402,158 @@
     }
   }
 
-  // ===== Canvas Coverage Layer =====
+  // ===== Bitmap Coverage Layer (L.ImageOverlay) =====
+  // RGBA colors for bands: [R, G, B, A]
+  var BAND_RGBA = [
+    [34, 197, 94, 140],    // band 0: strong (green, ~55% alpha)
+    [163, 230, 53, 128],   // band 1: usable (lime, ~50% alpha)
+    [250, 204, 21, 115]    // band 2: marginal (yellow, ~45% alpha)
+  ];
+  var BAND_EMPTY = 3;
+
   var RadioCoverageLayer = L.Layer.extend({
     initialize: function () {
-      this._points = [];
+      this._overlay = null;
+      this._imageData = null;
+      this._bandData = null;
       this._canvas = null;
-      this._ctx = null;
+      this._bounds = null;
+      this._bitmapW = 0;
+      this._bitmapH = 0;
+      this._minLat = 0;
+      this._maxLat = 0;
+      this._minLng = 0;
+      this._maxLng = 0;
+      // Mercator Y at top/bottom for pixel mapping
+      this._mercYTop = 0;
+      this._mercYBot = 0;
+      this._refreshTimer = null;
+      this._pendingCells = 0;
+      this._objectUrl = null;
     },
 
     onAdd: function (map) {
       this._map = map;
-      this._canvas = L.DomUtil.create('canvas', 'radio-coverage-canvas');
-      var size = map.getSize();
-      this._canvas.width = size.x;
-      this._canvas.height = size.y;
-      this._canvas.style.position = 'absolute';
-      this._canvas.style.top = '0';
-      this._canvas.style.left = '0';
-      this._canvas.style.pointerEvents = 'none';
-      this._canvas.style.zIndex = '450';
-      this._ctx = this._canvas.getContext('2d');
-      map.getPanes().overlayPane.appendChild(this._canvas);
-
-      map.on('moveend', this._fullRedraw, this);
-      map.on('zoomend', this._fullRedraw, this);
-      map.on('resize', this._onResize, this);
-      this._repositionCanvas();
     },
 
     onRemove: function (map) {
-      if (this._canvas && this._canvas.parentNode) {
-        this._canvas.parentNode.removeChild(this._canvas);
+      if (this._overlay) {
+        map.removeLayer(this._overlay);
+        this._overlay = null;
       }
-      map.off('moveend', this._fullRedraw, this);
-      map.off('zoomend', this._fullRedraw, this);
-      map.off('resize', this._onResize, this);
-      this._canvas = null;
-      this._ctx = null;
+      if (this._objectUrl) {
+        URL.revokeObjectURL(this._objectUrl);
+        this._objectUrl = null;
+      }
+      if (this._refreshTimer) {
+        clearTimeout(this._refreshTimer);
+        this._refreshTimer = null;
+      }
+      this._map = null;
     },
 
-    _onResize: function () {
-      if (!this._map || !this._canvas) return;
-      var size = this._map.getSize();
-      this._canvas.width = size.x;
-      this._canvas.height = size.y;
-      this._repositionCanvas();
-      this._fullRedraw();
+    initBitmap: function (minLat, maxLat, minLng, maxLng, widthPx, heightPx) {
+      this._minLat = minLat;
+      this._maxLat = maxLat;
+      this._minLng = minLng;
+      this._maxLng = maxLng;
+      this._bitmapW = widthPx;
+      this._bitmapH = heightPx;
+
+      // Pre-compute Mercator Y for top (maxLat) and bottom (minLat)
+      this._mercYTop = _latToMercY(maxLat);
+      this._mercYBot = _latToMercY(minLat);
+
+      this._imageData = new ImageData(widthPx, heightPx);
+      this._bandData = new Uint8Array(widthPx * heightPx);
+      for (var i = 0; i < this._bandData.length; i++) this._bandData[i] = BAND_EMPTY;
+
+      this._canvas = document.createElement('canvas');
+      this._canvas.width = widthPx;
+      this._canvas.height = heightPx;
+
+      this._bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+      this._pendingCells = 0;
     },
 
-    _repositionCanvas: function () {
-      if (!this._map || !this._canvas) return;
-      var topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, topLeft);
+    setCellByLatLng: function (lat, lng, band) {
+      if (!this._imageData) return;
+      // X: linear in longitude
+      var px = Math.round(((lng - this._minLng) / (this._maxLng - this._minLng)) * (this._bitmapW - 1));
+      // Y: linear in Mercator-projected space (top=0)
+      var mercY = _latToMercY(lat);
+      var py = Math.round(((this._mercYTop - mercY) / (this._mercYTop - this._mercYBot)) * (this._bitmapH - 1));
+
+      if (px < 0 || px >= this._bitmapW || py < 0 || py >= this._bitmapH) return;
+
+      var idx = py * this._bitmapW + px;
+      this._bandData[idx] = band;
+
+      var rgba = BAND_RGBA[band];
+      var off = idx * 4;
+      this._imageData.data[off]     = rgba[0];
+      this._imageData.data[off + 1] = rgba[1];
+      this._imageData.data[off + 2] = rgba[2];
+      this._imageData.data[off + 3] = rgba[3];
+
+      this._pendingCells++;
     },
 
-    addPoint: function (lat, lng, band) {
-      this._points.push([lat, lng, band]);
+    scheduleRefresh: function () {
+      if (this._refreshTimer) return;
+      var self = this;
+      if (this._pendingCells >= 5000) {
+        this._doRefresh();
+      } else {
+        this._refreshTimer = setTimeout(function () {
+          self._refreshTimer = null;
+          self._doRefresh();
+        }, 200);
+      }
     },
 
-    renderIncremental: function (startIdx) {
-      if (!this._ctx || !this._map) return;
-      var ctx = this._ctx;
-      var map = this._map;
-      var currentZoom = map.getZoom();
-      var scaleFactor = Math.pow(2, currentZoom - ANALYSIS_ZOOM);
-      var pixelSize = Math.max(1, Math.ceil(scaleFactor));
-      var w = this._canvas.width;
-      var h = this._canvas.height;
-      var pts = this._points;
+    flushRefresh: function () {
+      if (this._refreshTimer) {
+        clearTimeout(this._refreshTimer);
+        this._refreshTimer = null;
+      }
+      this._doRefresh();
+    },
 
-      var BAND_COLORS = [
-        'rgba(34, 197, 94, 0.55)',   // band 0: strong (green)
-        'rgba(163, 230, 53, 0.50)',  // band 1: usable (lime)
-        'rgba(250, 204, 21, 0.45)'  // band 2: marginal (yellow)
-      ];
+    _doRefresh: function () {
+      if (!this._map || !this._imageData || !this._canvas) return;
+      this._pendingCells = 0;
 
-      for (var b = 0; b < BAND_COLORS.length; b++) {
-        ctx.fillStyle = BAND_COLORS[b];
-        for (var i = startIdx; i < pts.length; i++) {
-          if (pts[i][2] !== b) continue;
-          var p = map.latLngToContainerPoint([pts[i][0], pts[i][1]]);
-          if (p.x < -pixelSize || p.x > w + pixelSize ||
-              p.y < -pixelSize || p.y > h + pixelSize) continue;
-          ctx.fillRect(p.x - pixelSize / 2, p.y - pixelSize / 2, pixelSize, pixelSize);
+      var ctx = this._canvas.getContext('2d');
+      ctx.putImageData(this._imageData, 0, 0);
+
+      // Revoke old object URL
+      if (this._objectUrl) {
+        URL.revokeObjectURL(this._objectUrl);
+        this._objectUrl = null;
+      }
+
+      var self = this;
+      this._canvas.toBlob(function (blob) {
+        if (!self._map) return;
+        self._objectUrl = URL.createObjectURL(blob);
+        if (self._overlay) {
+          self._overlay.setUrl(self._objectUrl);
+        } else {
+          self._overlay = L.imageOverlay(self._objectUrl, self._bounds, {
+            opacity: 1,
+            interactive: false,
+            zIndex: 450
+          }).addTo(self._map);
         }
-      }
-    },
-
-    _fullRedraw: function () {
-      if (!this._ctx || !this._map || !this._canvas) return;
-      this._repositionCanvas();
-      var size = this._map.getSize();
-      this._canvas.width = size.x;
-      this._canvas.height = size.y;
-      this.renderIncremental(0);
+      });
     },
   });
+
+  function _latToMercY(lat) {
+    var latRad = lat * Math.PI / 180;
+    return Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+  }
 
   // ===== Utility =====
   function clampNumber(val, min, max, fallback) {

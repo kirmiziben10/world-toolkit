@@ -140,5 +140,6 @@
   "radioTilesUsed": "Kullanılan karo: {{n}}",
   "radioTileLimitExceeded": "Karo limiti aşıldı ({{n}} karo). Daha küçük bir yarıçap deneyin.",
   "radioAborted": "Analiz iptal edildi",
+  "radioClampedNotice": "({{km}} km ile sınırlandı — bu güç/frekansta mümkün olan maksimum)",
   "skipTutorial": "Eğitimi atla"
 }
