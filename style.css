@@ -1786,6 +1786,38 @@ a.action-btn {
   opacity: 0.9;
 }
 
+/* Radio signal legend */
+.radio-legend {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid #E1CC94;
+}
+.radio-legend[hidden] { display: none; }
+.radio-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dark);
+  line-height: 1.8;
+}
+.radio-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.radio-legend-strong  { background: rgba(34, 197, 94, 0.7); }
+.radio-legend-usable  { background: rgba(163, 230, 53, 0.65); }
+.radio-legend-marginal { background: rgba(250, 204, 21, 0.6); }
+
+/* Radio stats band color indicators */
+.radio-stat-strong  { color: #22c55e; }
+.radio-stat-usable  { color: #a3e635; }
+.radio-stat-marginal { color: #facc15; }
+
 /* ===== Responsive ===== */
 @media (max-width: 900px) and (min-width: 601px) {
   #main-window {

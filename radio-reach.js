@@ -1,6 +1,6 @@
-// ===== Radio Reach — Line-of-Sight Coverage App =====
+// ===== Radio Reach — Longley-Rice Propagation Coverage App =====
 // Full-window app with its own Leaflet map, collapsible filter sidebar,
-// progress overlay, and coverage canvas.
+// progress overlay, and gradient coverage canvas.
 
 (function () {
   'use strict';
@@ -11,7 +11,7 @@
   var t = window.i18n.t;
   var ANALYSIS_ZOOM = 12;
   var EARTH_RADIUS = 6378137;
-  var MAX_TILES_LIMIT = 500;
+  var MAX_TILES_LIMIT = 2000;
 
   // Attribution strings
   var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -31,8 +31,8 @@
   var coordsEl, instructionEl, analyzeBtnEl, clearBtnEl,
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
-      antennaInput, radiusInput, frequencySelect,
-      controlsPanel, controlsToggle;
+      antennaInput, radiusInput, frequencySelect, txPowerInput,
+      controlsPanel, controlsToggle, legendEl;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -53,6 +53,8 @@
     antennaInput = document.getElementById('radio-antenna-height');
     radiusInput = document.getElementById('radio-radius');
     frequencySelect = document.getElementById('radio-frequency');
+    txPowerInput = document.getElementById('radio-tx-power');
+    legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
 
@@ -191,17 +193,21 @@
 
     var antennaHeight = clampNumber(antennaInput.value, 0, 500, 10);
     var radiusKm = clampNumber(radiusInput.value, 5, 100, 30);
+    var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var freqMHz = parseFloat(frequencySelect.value);
     antennaInput.value = antennaHeight;
     radiusInput.value = radiusKm;
+    txPowerInput.value = txPowerW;
 
     radioState.running = true;
     analyzeBtnEl.disabled = true;
     clearBtnEl.hidden = true;
     statsPanelEl.hidden = true;
+    if (legendEl) legendEl.hidden = true;
 
     progressOverlayEl.hidden = false;
     progressBarEl.style.width = '0%';
-    progressTextEl.textContent = t('radioAnalyzing');
+    progressTextEl.textContent = t('radioPhase1');
 
     removeOverlay();
 
@@ -209,14 +215,18 @@
     radioState.canvasLayer.addTo(radioState.map);
 
     if (radioState.worker) radioState.worker.terminate();
-    radioState.worker = new Worker('viewshed-worker.js');
+    radioState.worker = new Worker('radio-worker.js');
 
     radioState.worker.onmessage = function (e) {
       var msg = e.data;
       if (msg.type === 'needTiles') {
         fetchAndSendTiles(msg.tiles);
-      } else if (msg.type === 'rayBatch') {
-        handleRayBatch(msg);
+      } else if (msg.type === 'phase1Done') {
+        handlePhase1Done(msg);
+      } else if (msg.type === 'phase2Done') {
+        handlePhase2Done(msg);
+      } else if (msg.type === 'coverageBatch') {
+        handleCoverageBatch(msg);
       } else if (msg.type === 'done') {
         handleDone(msg.stats);
       } else if (msg.type === 'error') {
@@ -235,6 +245,8 @@
       antennaHeight: antennaHeight,
       radiusKm: radiusKm,
       zoom: ANALYSIS_ZOOM,
+      freqMHz: freqMHz,
+      txPowerW: txPowerW,
     });
   }
 
@@ -260,25 +272,31 @@
     });
   }
 
-  function handleRayBatch(msg) {
+  function handlePhase1Done(msg) {
+    progressTextEl.textContent = t('radioPhase2');
+    progressBarEl.style.width = '15%';
+  }
+
+  function handlePhase2Done(msg) {
+    radioState._totalCells = msg.totalCells;
+    progressTextEl.textContent = t('radioPhase3', { done: 0, total: msg.totalCells });
+    progressBarEl.style.width = '20%';
+  }
+
+  function handleCoverageBatch(msg) {
     if (!radioState.canvasLayer) return;
-    var pct = Math.round(msg.progress * 100);
+    var pct = 20 + Math.round(msg.progress * 80);
     progressBarEl.style.width = pct + '%';
-    progressTextEl.textContent = t('radioRayProgress', {
-      done: Math.round(msg.progress * 360),
-      total: 360
+    progressTextEl.textContent = t('radioPhase3', {
+      done: msg.evaluated,
+      total: radioState._totalCells || '?'
     });
 
     var layer = radioState.canvasLayer;
     var prevLen = layer._points.length;
-    for (var i = 0; i < msg.rays.length; i++) {
-      var ray = msg.rays[i];
-      for (var j = 0; j < ray.reachablePoints.length; j++) {
-        var pt = ray.reachablePoints[j];
-        if (pt.visible) {
-          layer.addPoint(pt.lat, pt.lng);
-        }
-      }
+    for (var i = 0; i < msg.cells.length; i++) {
+      var c = msg.cells[i];
+      layer.addPoint(c.lat, c.lng, c.band);
     }
     layer.renderIncremental(prevLen);
   }
@@ -289,27 +307,24 @@
     clearBtnEl.hidden = false;
     progressOverlayEl.hidden = true;
 
-    var maxReachKm = 0;
-    if (radioState.canvasLayer && radioState.canvasLayer._points.length > 0) {
-      var pts = radioState.canvasLayer._points;
-      for (var i = 0; i < pts.length; i++) {
-        var d = haversineDistance(radioState.lat, radioState.lng, pts[i][0], pts[i][1]);
-        if (d > maxReachKm) maxReachKm = d;
-      }
-      maxReachKm = maxReachKm / 1000;
-    }
-
-    var radiusKm = parseFloat(radiusInput.value) || 30;
-    var totalRayPoints = 360 * Math.ceil(radiusKm * 1000 / metersPerPixel(radioState.lat, ANALYSIS_ZOOM));
-    var visibleCount = radioState.canvasLayer ? radioState.canvasLayer._points.length : 0;
-    var coverage = totalRayPoints > 0 ? Math.min(100, Math.round((visibleCount / totalRayPoints) * 100)) : 0;
+    var maxReachKm = (stats.maxReachM / 1000).toFixed(1);
+    var mppVal = metersPerPixel(radioState.lat, ANALYSIS_ZOOM);
+    var pixelAreaKm2 = (mppVal * mppVal) / 1e6;
+    var strongAreaKm2 = (stats.strongCount * pixelAreaKm2).toFixed(1);
+    var usableAreaKm2 = (stats.usableCount * pixelAreaKm2).toFixed(1);
+    var marginalAreaKm2 = (stats.marginalCount * pixelAreaKm2).toFixed(1);
 
     statsEl.innerHTML =
       '<strong>' + t('radioComplete') + '</strong><br>' +
       t('radioTilesUsed', { n: stats.tilesUsed }) + '<br>' +
-      t('radioMaxReach', { km: maxReachKm.toFixed(1) }) + '<br>' +
-      t('radioCoverage', { pct: coverage });
+      t('radioCellsEvaluated', { n: stats.cellsEvaluated }) + '<br>' +
+      t('radioMaxReach', { km: maxReachKm }) + '<br>' +
+      '<span class="radio-stat-strong">&#9632;</span> ' + t('radioStrongArea', { km2: strongAreaKm2 }) + '<br>' +
+      '<span class="radio-stat-usable">&#9632;</span> ' + t('radioUsableArea', { km2: usableAreaKm2 }) + '<br>' +
+      '<span class="radio-stat-marginal">&#9632;</span> ' + t('radioMarginalArea', { km2: marginalAreaKm2 });
     statsPanelEl.hidden = false;
+
+    if (legendEl) legendEl.hidden = false;
 
     if (radioState.worker) {
       radioState.worker.terminate();
@@ -358,6 +373,7 @@
     progressOverlayEl.hidden = true;
     statsPanelEl.hidden = true;
     progressBarEl.style.width = '0%';
+    if (legendEl) legendEl.hidden = true;
   }
 
   function removeOverlay() {
@@ -421,8 +437,8 @@
       L.DomUtil.setPosition(this._canvas, topLeft);
     },
 
-    addPoint: function (lat, lng) {
-      this._points.push([lat, lng]);
+    addPoint: function (lat, lng, band) {
+      this._points.push([lat, lng, band]);
     },
 
     renderIncremental: function (startIdx) {
@@ -434,15 +450,23 @@
       var pixelSize = Math.max(1, Math.ceil(scaleFactor));
       var w = this._canvas.width;
       var h = this._canvas.height;
-
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.35)';
-
       var pts = this._points;
-      for (var i = startIdx; i < pts.length; i++) {
-        var p = map.latLngToContainerPoint([pts[i][0], pts[i][1]]);
-        if (p.x < -pixelSize || p.x > w + pixelSize ||
-            p.y < -pixelSize || p.y > h + pixelSize) continue;
-        ctx.fillRect(p.x - pixelSize / 2, p.y - pixelSize / 2, pixelSize, pixelSize);
+
+      var BAND_COLORS = [
+        'rgba(34, 197, 94, 0.55)',   // band 0: strong (green)
+        'rgba(163, 230, 53, 0.50)',  // band 1: usable (lime)
+        'rgba(250, 204, 21, 0.45)'  // band 2: marginal (yellow)
+      ];
+
+      for (var b = 0; b < BAND_COLORS.length; b++) {
+        ctx.fillStyle = BAND_COLORS[b];
+        for (var i = startIdx; i < pts.length; i++) {
+          if (pts[i][2] !== b) continue;
+          var p = map.latLngToContainerPoint([pts[i][0], pts[i][1]]);
+          if (p.x < -pixelSize || p.x > w + pixelSize ||
+              p.y < -pixelSize || p.y > h + pixelSize) continue;
+          ctx.fillRect(p.x - pixelSize / 2, p.y - pixelSize / 2, pixelSize, pixelSize);
+        }
       }
     },
 
