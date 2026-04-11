@@ -145,5 +145,6 @@
   "radioClampedNotice": "({{km}} km ile sınırlandı — bu güç/frekansta mümkün olan maksimum)",
   "radioUnfiltered": "Filtresiz (maskeleme/sınırlama yok)",
   "radioElapsed": "Süre: {{time}}",
+  "radioMemoryGuardrail": "Yarıçap çok büyük ({{mb}} MB). Radar Tarama Modunu etkinleştirin veya analiz yarıçapını küçültün.",
   "skipTutorial": "Eğitimi atla"
 }

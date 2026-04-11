@@ -31,10 +31,10 @@ diameter = pixelRadius * 2
 requiredMB = (diameter * diameter) / (1024 * 1024)
 ```
 
-If `requiredMB > 500` AND `radarSweepCheck.checked === false`:
+If `requiredMB > 300` AND `radarSweepCheck.checked === false`:
 - Abort immediately, do not spawn workers
 - Show localized warning in stats panel: "Radius too large — enable Radar Sweep Mode or reduce radius"
-- The 500MB threshold accounts for the Uint8Array mask plus working buffers
+- The 300MB threshold for the mask itself leaves headroom for working buffers (dilation temp array, Phase 1 point arrays, etc.) within the ~500MB tab allocation safety limit
 
 If radar sweep IS checked, no limit applies — wedge processing never builds the full mask.
 
@@ -63,7 +63,7 @@ For each wedge `w` (0 to 35):
    - Compute tight axis-aligned bounding box of these 3 points (plus a buffer of `BUFFER_KM` pixels as in existing Phase 2).
    - Allocate a small `Uint8Array` mask for this bbox. Mask origin/dimensions are local to this wedge.
    - If adaptive culling is off: project LOS reachable points into mask, dilate with `dilateMask()`, clip to wedge arc (angle test + radius test).
-   - If adaptive culling is on: iterate mask pixels, set to 1 if pixel's bearing from TX is within `[w*10, (w+1)*10)` AND distance <= `radiusM`. No LOS filtering.
+   - If adaptive culling is on: iterate mask pixels, set to 1 if pixel's bearing from TX is within `[w*10, (w+1)*10)` AND distance <= `radiusM`. No LOS filtering. **Early-out optimization:** when iterating rows, if a pixel's distance from TX exceeds `radiusM`, skip the rest of that row (radial geometry guarantees once you're past the radius on a given row, you stay past it). This cheaply skips the empty corners of the bbox at large radii.
    - The wedge mask is ~1/36th the pixels of the full circle mask (even smaller for edge wedges near poles of the bbox).
 
 4. **Post `phase3Partition`:** Send wedge mask to main thread, tagged with:
@@ -71,13 +71,16 @@ For each wedge `w` (0 to 35):
    - `totalWedges: 36`
    - `isRadarSweep: true`
 
-5. **Wait for `wedgeDone`:** Pause via continuation-passing pattern until main thread signals completion.
+5. **Wait for `wedgeDone`:** The orchestrator uses an **explicit state machine** with states `IDLE`, `WEDGE_RUNNING`, `WAITING_FOR_MAIN`. The `self.onmessage` handler dispatches based on `sweepState`:
+   - `IDLE`: accepts `start` messages.
+   - `WEDGE_RUNNING`: processes `tiles` messages for the current wedge.
+   - `WAITING_FOR_MAIN`: only accepts `wedgeDone`, transitions back to `WEDGE_RUNNING` for the next wedge (or to `IDLE` after the last wedge). Any other message type in this state is a bug and logged as a warning.
 
 ### New message types
 
 - Orchestrator → main: `phase3Partition` (existing, extended with `wedgeIndex`, `totalWedges`, `isRadarSweep`)
 - Main → orchestrator: `wedgeDone` (new)
-- Orchestrator listens for `wedgeDone` in `self.onmessage`
+- Orchestrator dispatches `wedgeDone` based on `sweepState === 'WAITING_FOR_MAIN'`; unexpected arrivals are logged and ignored
 
 ### Coverage bounds
 
@@ -112,7 +115,7 @@ When `adaptiveCulling === true`:
 1. **Block grid overlay:** Within each 64x64 chunk, sub-group cells into 4x4 blocks keyed by `(cellX >> 2, cellY >> 2)`.
 
 2. **Pass 1 — Coarse scout:** For each 4x4 block:
-   - Pick the cell nearest to the block center.
+   - Pick the cell with the **highest elevation** in the block. In mountainous terrain this significantly reduces false negatives — hilltops are most likely to receive signal, so scouting them avoids killing blocks that have reachable high ground. The elevation is already available from tile data at zero extra I/O cost; just track the max-elevation cell while iterating the block.
    - Run `buildProfile` + ITM on this single cell.
    - If margin >= 0 (marginal or better): block is "alive."
    - If margin < 0: block is "dead" — all cells in the block are skipped.
@@ -135,10 +138,12 @@ When `adaptiveCulling === false`: existing 1:1 per-cell loop unchanged.
 
 | Radar Sweep | Adaptive Culling | Phase 1 | Mask Builder | Evaluation | Memory Limit |
 |:-----------:|:----------------:|:-------:|:------------:|:----------:|:------------:|
-| Off         | Off              | Normal (360-ray LOS) | LOS bbox + dilate | 1:1 per-cell | 500MB guard |
-| Off         | On               | **Skipped** | Full circle unfiltered | **Coarse-to-fine** | 500MB guard |
+| Off         | Off              | Normal (360-ray LOS) | LOS bbox + dilate | 1:1 per-cell | 300MB guard |
+| Off         | On               | **Skipped** | Full circle unfiltered | **Coarse-to-fine** | 300MB guard |
 | On          | Off              | Per-wedge rays | Wedge bbox + dilate | 1:1 per-cell | No limit |
 | On          | On               | **Skipped** | Wedge arc fill | **Coarse-to-fine** | No limit |
+
+**Note on "Sweep Off + Culling On":** The mask is built as one full circle piece (same as the Off/Off path, but using `runPhase2Unfiltered` since Phase 1 is skipped). The 300MB guardrail remains active. Adaptive Culling applies **only** to the ITM evaluation phase in the propagation workers — it does not make the mask builder lazy. Keeping the mask monolithic here avoids scope creep and preserves a clear separation: Radar Sweep controls *how the mask is built* (monolithic vs. wedge), Adaptive Culling controls *how cells are evaluated* (1:1 vs. coarse-to-fine).
 
 ## 6. Data Flow (Sweep + Culling)
 
@@ -165,7 +170,7 @@ radio-propagation-worker.js (per wedge slice):
   Decode mask → cells
   Group into 64x64 chunks
     Within each chunk: sub-group into 4x4 blocks
-    Pass 1: Scout center cell of each block (ITM)
+    Pass 1: Scout highest-elevation cell of each block (ITM)
     Pass 2: Fine-fill alive blocks, skip dead blocks
   Emit coverageBatch → main thread renders cells
   Emit sliceDone

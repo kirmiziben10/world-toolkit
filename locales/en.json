@@ -145,5 +145,6 @@
   "radioClampedNotice": "(capped at {{km}} km — max possible at this power/frequency)",
   "radioUnfiltered": "Unfiltered (no masking/clamp)",
   "radioElapsed": "Elapsed: {{time}}",
+  "radioMemoryGuardrail": "Radius too large ({{mb}} MB). Enable Radar Sweep Mode or reduce the analysis radius.",
   "skipTutorial": "Skip tutorial"
 }

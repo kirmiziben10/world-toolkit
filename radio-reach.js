@@ -12,6 +12,7 @@
   var ANALYSIS_ZOOM = 12;
   var EARTH_RADIUS = 6378137;
   var MAX_TILES_LIMIT = 2000;
+  var MAX_MASK_MB = 300;
   var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
 
   // Attribution strings
@@ -206,6 +207,20 @@
     antennaInput.value = antennaHeight;
     radiusInput.value = radiusKm;
     txPowerInput.value = txPowerW;
+
+    // Memory guardrail: abort if full-circle mask would exceed MAX_MASK_MB
+    // and radar sweep is not enabled to break the work into wedges
+    if (!radarSweepCheck.checked) {
+      var mppGuard = metersPerPixel(radioState.lat, ANALYSIS_ZOOM);
+      var pixelRadius = (radiusKm * 1000) / mppGuard;
+      var diameter = pixelRadius * 2;
+      var requiredMB = (diameter * diameter) / (1024 * 1024);
+      if (requiredMB > MAX_MASK_MB) {
+        statsEl.innerHTML = t('radioMemoryGuardrail', { mb: Math.round(requiredMB) });
+        statsPanelEl.hidden = false;
+        return;
+      }
+    }
 
     radioState.running = true;
     radioState.startTime = performance.now();
