@@ -141,6 +141,7 @@
   "radioWorkerCount": "{{n}} iş parçacığıyla değerlendirildi",
   "radioTileLimitExceeded": "Karo limiti aşıldı ({{n}} karo). Daha küçük bir yarıçap deneyin.",
   "radioAborted": "Analiz iptal edildi",
+  "radioWasmRequired": "Radyo Erişim için WebAssembly gereklidir. Tarayıcınız desteklemiyor olabilir veya WASM modülü yüklenemedi. Ayrıntılar için tarayıcı konsolunu açın.",
   "radioClampedNotice": "({{km}} km ile sınırlandı — bu güç/frekansta mümkün olan maksimum)",
   "skipTutorial": "Eğitimi atla"
 }

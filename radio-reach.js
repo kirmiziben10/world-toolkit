@@ -418,6 +418,7 @@
     agg.marginalCount += msg.stats.marginalCount;
     agg.tilesUsed += msg.stats.tilesUsed;
     if (msg.stats.maxReachM > agg.maxReachM) agg.maxReachM = msg.stats.maxReachM;
+    if (msg.itmBackend) agg.itmBackend = msg.itmBackend;
 
     radioState._propSlicesDone++;
     if (radioState._propSlicesDone >= radioState._propTotalSlices) {
@@ -429,7 +430,8 @@
         usableCount: agg.usableCount,
         marginalCount: agg.marginalCount,
         maxReachM: agg.maxReachM,
-        workerCount: radioState._propWorkerCount
+        workerCount: radioState._propWorkerCount,
+        itmBackend: agg.itmBackend
       });
     }
   }
@@ -467,7 +469,8 @@
       t('radioWorkerCount', { n: workerCount }) + '<br>' +
       '<span class="radio-stat-strong">&#9632;</span> ' + t('radioStrongArea', { km2: strongAreaKm2 }) + '<br>' +
       '<span class="radio-stat-usable">&#9632;</span> ' + t('radioUsableArea', { km2: usableAreaKm2 }) + '<br>' +
-      '<span class="radio-stat-marginal">&#9632;</span> ' + t('radioMarginalArea', { km2: marginalAreaKm2 });
+      '<span class="radio-stat-marginal">&#9632;</span> ' + t('radioMarginalArea', { km2: marginalAreaKm2 }) +
+      '<br>ITM: ' + (stats.itmBackend === 'wasm' ? 'WASM' : stats.itmBackend || 'unknown');
     statsPanelEl.hidden = false;
 
     if (legendEl) legendEl.hidden = false;
@@ -486,6 +489,9 @@
 
     if (msg.message === 'TILE_LIMIT') {
       statsEl.innerHTML = t('radioTileLimitExceeded', { n: msg.count || MAX_TILES_LIMIT });
+    } else if (msg.message === 'WASM_INIT_FAILED') {
+      console.error('ITM WASM init failed:', msg.detail);
+      statsEl.innerHTML = t('radioWasmRequired');
     } else {
       statsEl.innerHTML = t('radioAborted') + ': ' + sanitize(msg.message);
     }

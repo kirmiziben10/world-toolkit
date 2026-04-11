@@ -141,6 +141,7 @@
   "radioWorkerCount": "Evaluated with {{n}} workers",
   "radioTileLimitExceeded": "Tile limit exceeded ({{n}} tiles). Try a smaller radius.",
   "radioAborted": "Analysis aborted",
+  "radioWasmRequired": "Radio Reach requires WebAssembly. Your browser may not support it, or the WASM module failed to load. Open the browser console for details.",
   "radioClampedNotice": "(capped at {{km}} km — max possible at this power/frequency)",
   "skipTutorial": "Skip tutorial"
 }
