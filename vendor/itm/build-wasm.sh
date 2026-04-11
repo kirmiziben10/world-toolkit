@@ -6,13 +6,10 @@
 #      git clone https://github.com/emscripten-core/emsdk.git /tmp/emsdk
 #      cd /tmp/emsdk && ./emsdk install latest && ./emsdk activate latest
 #
-#   2. NTIA ITM C++ reference cloned to /tmp/ntia-itm
-#      git clone https://github.com/NTIA/itm.git /tmp/ntia-itm
-#
-# Source patches applied automatically:
-#   - All .cpp files: backslash include paths → Unix forward slashes
-#     e.g. "..\include\itm.h" → "../include/itm.h"
-#   - include/itm.h: DLLEXPORT macro uses EMSCRIPTEN_KEEPALIVE under __EMSCRIPTEN__
+#   2. Patched NTIA ITM C++ source is in src/ and include/ (checked in).
+#      Original: https://github.com/NTIA/itm
+#      Patches: backslash includes → forward slashes,
+#               DLLEXPORT → EMSCRIPTEN_KEEPALIVE under __EMSCRIPTEN__
 #
 # Output: vendor/itm/itm-glue.js + vendor/itm/itm-glue.wasm
 
@@ -21,8 +18,8 @@ set -euo pipefail
 source /tmp/emsdk/emsdk_env.sh 2>/dev/null
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC_DIR="/tmp/ntia-itm-patched/src"
-INC_DIR="/tmp/ntia-itm-patched/include"
+SRC_DIR="$SCRIPT_DIR/src"
+INC_DIR="$SCRIPT_DIR/include"
 OUT_DIR="$SCRIPT_DIR"
 
 # Collect all C++ source files
