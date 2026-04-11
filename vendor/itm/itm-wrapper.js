@@ -1,30 +1,58 @@
 /**
- * ITM Wrapper — clean API for Radio Reach integration.
+ * ITM Wrapper — WASM-only API for Radio Reach integration.
  *
- * Requires itm.js to be loaded first (provides self.ITM or require('./itm')).
- * Works in browser, Web Worker (importScripts), and Node.js.
+ * Requires itm-glue.js and itm-loader.js to be loaded first.
+ * Works in Web Workers (importScripts) and main thread (script tag).
+ *
+ * NO JS FALLBACK. If WASM fails to load, initITM() throws and analysis
+ * must not proceed.
  */
 (function () {
   'use strict';
 
-  var ITM = (typeof self !== 'undefined' && self.ITM) ||
-            (typeof module !== 'undefined' && require('./itm'));
-
-  // Hardcoded defaults for Radio Reach
-  var CLIMATE = 5;       // continental temperate
-  var N_0     = 301;     // standard refractivity, N-Units
-  var POL     = 1;       // vertical polarization
-  var EPSILON = 15;      // average ground relative permittivity
-  var SIGMA   = 0.008;   // average ground conductivity, S/m
-  var MDVAR   = 12;      // broadcast mode, no direct situation variability
-  var TIME    = 50;      // median time percentage
-  var LOCATION = 50;     // median location percentage
-  var SITUATION = 50;    // median situation percentage
+  var wasmComputeFn = null;
+  var ready = false;
+  var initPromise = null;
 
   /**
-   * Compute point-to-point path loss using the NTIA Longley-Rice ITM.
+   * Initialize the WASM ITM backend. Must be called once before
+   * computeITMPathLoss(). Throws if WASM instantiation fails.
+   * Safe to call multiple times — returns cached promise.
+   * @returns {Promise<void>}
+   */
+  function initITM() {
+    if (initPromise) return initPromise;
+
+    initPromise = new Promise(function (resolve, reject) {
+      var loadFn = (typeof self !== 'undefined' && self.loadITMWasm) ||
+                   (typeof module !== 'undefined' && (function () {
+                     try { return require('./itm-loader').loadITMWasm; } catch (e) { return null; }
+                   })());
+
+      if (!loadFn) {
+        initPromise = null;
+        reject(new Error('ITM WASM loader not available (loadITMWasm not found)'));
+        return;
+      }
+
+      loadFn().then(function (wasmModule) {
+        wasmComputeFn = wasmModule.computeITMPathLossWasm;
+        ready = true;
+        resolve();
+      }).catch(function (err) {
+        initPromise = null;
+        reject(new Error('ITM WASM init failed: ' + (err.message || err)));
+      });
+    });
+
+    return initPromise;
+  }
+
+  /**
+   * Compute point-to-point path loss using the NTIA Longley-Rice ITM (WASM).
+   * initITM() must have completed before calling this.
    *
-   * @param {Float32Array|number[]} profile - Terrain elevations in meters, TX-to-RX
+   * @param {Float32Array|Float64Array|number[]} profile - Terrain elevations TX→RX
    * @param {number} spacingM   - Distance between profile samples, in meters
    * @param {number} txHeightM  - TX antenna height above ground level, in meters
    * @param {number} rxHeightM  - RX antenna height above ground level, in meters
@@ -32,38 +60,36 @@
    * @returns {number} Basic transmission loss in dB
    */
   function computeITMPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz) {
-    // Build PFL array: [N, stepMeters, elev0, elev1, ..., elevN]
-    // N = number of intervals = number of elevation samples - 1
-    var nSamples = profile.length;
-    var N = nSamples - 1;
-
-    var pfl = new Array(N + 2);
-    pfl[0] = N;
-    pfl[1] = spacingM;
-    for (var i = 0; i < nSamples; i++) {
-      pfl[i + 2] = profile[i];
+    if (!ready) {
+      throw new Error('ITM not initialized — call initITM() first.');
     }
+    return wasmComputeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz);
+  }
 
-    var result = ITM.ITM_P2P_TLS(
-      txHeightM, rxHeightM, pfl,
-      CLIMATE, N_0, freqMHz,
-      POL, EPSILON, SIGMA,
-      MDVAR, TIME, LOCATION, SITUATION
-    );
+  /**
+   * Returns true if initITM() has completed successfully.
+   * @returns {boolean}
+   */
+  function isITMReady() {
+    return ready;
+  }
 
-    // Error codes >= 1000 are hard failures; 0 and 1 (SUCCESS_WITH_WARNINGS) are fine
-    if (result.error >= 1000) {
-      throw new Error('ITM error ' + result.error + ' (warnings: 0x' + result.warnings.toString(16) + ')');
-    }
-
-    return result.A__db;
+  /**
+   * Returns the active backend name ('wasm').
+   * @returns {string}
+   */
+  function getITMBackend() {
+    return 'wasm';
   }
 
   // Export
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { computeITMPathLoss: computeITMPathLoss };
+    module.exports = { computeITMPathLoss: computeITMPathLoss, initITM: initITM, isITMReady: isITMReady, getITMBackend: getITMBackend };
   } else if (typeof self !== 'undefined') {
     self.computeITMPathLoss = computeITMPathLoss;
+    self.initITM = initITM;
+    self.isITMReady = isITMReady;
+    self.getITMBackend = getITMBackend;
   }
 
 })();
