@@ -269,8 +269,7 @@ function handleStartInner(msg) {
   var cells = msg.cells;
   var totalCells = cells.length;
 
-  // Track tiles-used per slice (don't clear cache between slices on same worker)
-  tilesUsed = 0;
+  // Tile limit is cumulative across all slices on this worker — do not reset tilesUsed
 
   // Ensure TX tile is loaded first
   var txTile = getTileCoord(txLat, txLng);
