@@ -139,11 +139,16 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+var MAX_PROFILE_SAMPLES = 2048;
+
 function buildProfile(lat1, lng1, lat2, lng2) {
   var distM = haversineDistance(lat1, lng1, lat2, lng2);
   if (distM < mpp) return null;
 
   var nSamples = Math.max(2, Math.round(distM / mpp));
+  // Cap at WASM PFL buffer limit — resample at coarser spacing for long paths
+  if (nSamples > MAX_PROFILE_SAMPLES) nSamples = MAX_PROFILE_SAMPLES;
+  var spacingM = distM / (nSamples - 1);
   var profile = new Float32Array(nSamples);
 
   for (var i = 0; i < nSamples; i++) {
@@ -155,7 +160,7 @@ function buildProfile(lat1, lng1, lat2, lng2) {
     profile[i] = elev;
   }
 
-  return profile;
+  return { profile: profile, spacingM: spacingM };
 }
 
 function collectChunkTiles(cells, startIdx, endIdx) {
@@ -298,13 +303,13 @@ function processSlice(cells, totalCells) {
       for (var ci = 0; ci < chunk.length; ci++) {
         var cell = chunk[ci];
 
-        var profile = buildProfile(txLat, txLng, cell.lat, cell.lng);
-        if (!profile) continue;
+        var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
+        if (!result) continue;
 
         var pathLoss;
         try {
           pathLoss = self.computeITMPathLoss(
-            profile, mpp, antennaHeight, RX_HEIGHT_M, freqMHz
+            result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
           );
         } catch (e) {
           continue;
