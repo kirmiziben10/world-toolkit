@@ -163,6 +163,22 @@ function buildProfile(lat1, lng1, lat2, lng2) {
   return { profile: profile, spacingM: spacingM };
 }
 
+// ===== Mask-to-geo coordinate helpers =====
+var maskOriginGlobalX = 0;
+var maskOriginGlobalY = 0;
+
+function globalPixelYToLat(gpy) {
+  var n = Math.pow(2, zoom);
+  var yFrac = gpy / (n * TILE_SIZE);
+  var nVal = Math.PI - 2 * Math.PI * yFrac;
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(nVal) - Math.exp(-nVal)));
+}
+
+function globalPixelXToLng(gpx) {
+  var n = Math.pow(2, zoom);
+  return (gpx / (n * TILE_SIZE)) * 360 - 180;
+}
+
 function collectChunkTiles(cells, startIdx, endIdx) {
   // Find bbox of chunk cells only (not TX) for corner ray tracing
   var minLat = Infinity, maxLat = -Infinity;
@@ -265,8 +281,28 @@ function handleStartInner(msg) {
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
+  maskOriginGlobalX = msg.maskOriginGlobalX;
+  maskOriginGlobalY = msg.maskOriginGlobalY;
 
-  var cells = msg.cells;
+  // Decode binary mask slice into cell list
+  var mask = new Uint8Array(msg.mask);
+  var maskW = msg.maskW;
+  var rowOffset = msg.rowOffset;
+  var rows = msg.rows;
+  var cells = [];
+  for (var ry = 0; ry < rows; ry++) {
+    var globalCellY = rowOffset + ry;
+    for (var px = 0; px < maskW; px++) {
+      if (!mask[ry * maskW + px]) continue;
+      cells.push({
+        cellX: px,
+        cellY: globalCellY,
+        lat: globalPixelYToLat(maskOriginGlobalY + globalCellY),
+        lng: globalPixelXToLng(maskOriginGlobalX + px)
+      });
+    }
+  }
+
   var totalCells = cells.length;
 
   // Tile limit is cumulative across all slices on this worker — do not reset tilesUsed
@@ -287,9 +323,25 @@ function processSlice(cells, totalCells) {
   var rxGainDbi = 0;
 
   var evaluated = 0;
-  var batchCells = [];
+  // Binary batch buffer: Uint16Array triples [cellX, cellY, band, ...]
+  var batchBuf = new Uint16Array(COVERAGE_BATCH_SIZE * 3);
+  var batchCount = 0;
   var strongCount = 0, usableCount = 0, marginalCount = 0;
   var maxReachM = 0;
+
+  function flushBatch(progress) {
+    if (batchCount === 0) return;
+    var slice = batchBuf.slice(0, batchCount * 3);
+    self.postMessage({
+      type: 'coverageBatch',
+      sliceId: sliceId,
+      cells: slice.buffer,
+      progress: progress,
+      evaluated: evaluated
+    }, [slice.buffer]);
+    batchBuf = new Uint16Array(COVERAGE_BATCH_SIZE * 3);
+    batchCount = 0;
+  }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.
   // Group by (cellX >> 6, cellY >> 6) to match CHUNK_SIZE = 64.
@@ -306,15 +358,7 @@ function processSlice(cells, totalCells) {
   function processNextChunk() {
     if (chunkIndex >= chunkKeys.length) {
       // Flush remaining batch
-      if (batchCells.length > 0) {
-        self.postMessage({
-          type: 'coverageBatch',
-          sliceId: sliceId,
-          cells: batchCells,
-          progress: 1.0,
-          evaluated: evaluated
-        });
-      }
+      flushBatch(1.0);
       self.postMessage({
         type: 'sliceDone',
         sliceId: sliceId,
@@ -367,17 +411,14 @@ function processSlice(cells, totalCells) {
         var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
         if (distM > maxReachM) maxReachM = distM;
 
-        batchCells.push({ cellX: cell.cellX, cellY: cell.cellY, band: band });
+        var bi = batchCount * 3;
+        batchBuf[bi]     = cell.cellX;
+        batchBuf[bi + 1] = cell.cellY;
+        batchBuf[bi + 2] = band;
+        batchCount++;
 
-        if (batchCells.length >= COVERAGE_BATCH_SIZE) {
-          self.postMessage({
-            type: 'coverageBatch',
-            sliceId: sliceId,
-            cells: batchCells,
-            progress: evaluated / totalCells,
-            evaluated: evaluated
-          });
-          batchCells = [];
+        if (batchCount >= COVERAGE_BATCH_SIZE) {
+          flushBatch(evaluated / totalCells);
         }
       }
 

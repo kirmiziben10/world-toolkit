@@ -492,44 +492,21 @@ function dilateMask(mask, w, h, radius) {
   }
 }
 
-// ===== Phase 3: Partition mask cells and delegate to propagation workers =====
-// Instead of evaluating ITM here, we collect all 1-cells from the mask,
-// partition them into contiguous row-major chunks, and send them to the main
-// thread which spawns dedicated propagation workers.
+// ===== Phase 3: Send binary mask to main thread for propagation worker dispatch =====
+// Instead of building object arrays, we transfer the raw Uint8Array mask plus
+// the metadata needed for downstream workers to reconstruct cell coordinates.
 
 function runPhase3(mask, mw, mh, totalCells) {
-  // Collect all 1-cells in row-major order (top-left → bottom-right)
-  var allCells = [];
-  for (var py = 0; py < mh; py++) {
-    for (var px = 0; px < mw; px++) {
-      if (!mask[py * mw + px]) continue;
-      allCells.push({
-        cellX: px,
-        cellY: py,
-        lat: globalPixelYToLat(maskOriginGlobalY + py),
-        lng: globalPixelXToLng(maskOriginGlobalX + px)
-      });
-    }
-  }
-
-  // Determine slice count: use up to 4 slices, but no more than totalCells
-  var sliceCount = Math.min(4, allCells.length);
-  if (sliceCount < 1) sliceCount = 1;
-
-  // Divide cells into sliceCount contiguous chunks
-  var slices = [];
-  var baseSize = Math.floor(allCells.length / sliceCount);
-  var remainder = allCells.length % sliceCount;
-  var offset = 0;
-  for (var s = 0; s < sliceCount; s++) {
-    var chunkSize = baseSize + (s < remainder ? 1 : 0);
-    slices.push(allCells.slice(offset, offset + chunkSize));
-    offset += chunkSize;
-  }
+  // Transfer a copy of the mask so the buffer can be sent zero-copy
+  var maskCopy = new Uint8Array(mask);
 
   self.postMessage({
     type: 'phase3Partition',
-    slices: slices,
+    mask: maskCopy.buffer,
+    maskW: mw,
+    maskH: mh,
+    maskOriginGlobalX: maskOriginGlobalX,
+    maskOriginGlobalY: maskOriginGlobalY,
     totalCells: totalCells,
     txParams: {
       txLat: txLat,
@@ -543,5 +520,5 @@ function runPhase3(mask, mw, mh, totalCells) {
       unfiltered: unfilteredMode
     },
     tilesUsed: tilesUsed
-  });
+  }, [maskCopy.buffer]);
 }

@@ -335,34 +335,58 @@
     });
 
     var layer = radioState.canvasLayer;
-    for (var i = 0; i < msg.cells.length; i++) {
-      var c = msg.cells[i];
-      // Propagation workers send bitmap pixel coords (cellX, cellY)
-      layer.setCellByBitmapXY(c.cellX, c.cellY, c.band);
+    // Decode binary coverage: Uint16Array with [cellX, cellY, band, ...] triples
+    var data = new Uint16Array(msg.cells);
+    for (var i = 0; i < data.length; i += 3) {
+      layer.setCellByBitmapXY(data[i], data[i + 1], data[i + 2]);
     }
     layer.scheduleRefresh();
   }
 
   // ===== Phase 3 Partition → Spawn Propagation Workers =====
   function handlePhase3Partition(msg) {
-    var slices = msg.slices;
+    var mask = new Uint8Array(msg.mask);
+    var maskW = msg.maskW;
+    var maskH = msg.maskH;
     var txParams = msg.txParams;
     radioState._propTotalCells = msg.totalCells;
     radioState._propTotalEvaluated = 0;
     radioState._propSliceEval = {};
     radioState._propOrchestratorTiles = msg.tilesUsed;
     radioState._unfiltered = msg.txParams.unfiltered;
-    radioState._propWorkerCount = Math.min(PROP_WORKER_COUNT, slices.length);
+
+    // Determine slice count: split mask into horizontal row-bands
+    var sliceCount = Math.min(4, maskH);
+    if (sliceCount < 1) sliceCount = 1;
+    radioState._propWorkerCount = Math.min(PROP_WORKER_COUNT, sliceCount);
 
     // Terminate any lingering propagation workers
     terminatePropWorkers();
+
+    // Build row-range slices: each slice is a contiguous band of rows
+    var slices = [];
+    var baseRows = Math.floor(maskH / sliceCount);
+    var remainder = maskH % sliceCount;
+    var rowOffset = 0;
+    for (var s = 0; s < sliceCount; s++) {
+      var rows = baseRows + (s < remainder ? 1 : 0);
+      var byteOffset = rowOffset * maskW;
+      var byteLen = rows * maskW;
+      slices.push({
+        sliceId: s,
+        rowOffset: rowOffset,
+        rows: rows,
+        mask: mask.slice(byteOffset, byteOffset + byteLen)
+      });
+      rowOffset += rows;
+    }
 
     // Distribute slices round-robin to workers
     var workerCount = radioState._propWorkerCount;
     var workerSlices = [];
     for (var w = 0; w < workerCount; w++) workerSlices.push([]);
     for (var s = 0; s < slices.length; s++) {
-      workerSlices[s % workerCount].push({ sliceId: s, cells: slices[s] });
+      workerSlices[s % workerCount].push(slices[s]);
     }
 
     // Track completion
@@ -406,9 +430,15 @@
       // Post all slices assigned to this worker
       for (var si = 0; si < workerSlices[w].length; si++) {
         var assignment = workerSlices[w][si];
+        var sliceMaskCopy = new Uint8Array(assignment.mask);
         pw.postMessage({
           type: 'start',
-          cells: assignment.cells,
+          mask: sliceMaskCopy.buffer,
+          maskW: maskW,
+          rowOffset: assignment.rowOffset,
+          rows: assignment.rows,
+          maskOriginGlobalX: msg.maskOriginGlobalX,
+          maskOriginGlobalY: msg.maskOriginGlobalY,
           sliceId: assignment.sliceId,
           txLat: txParams.txLat,
           txLng: txParams.txLng,
@@ -419,7 +449,7 @@
           zoom: txParams.zoom,
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered
-        });
+        }, [sliceMaskCopy.buffer]);
       }
     }
   }
