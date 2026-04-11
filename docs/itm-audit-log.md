@@ -109,18 +109,25 @@ phantom bug.
 
 Clean UI feature showing analysis duration. Not debug cruft.
 
-## Summary
+## Reverts applied
 
-**Items to revert:**
-1. `console.warn` in `radio-propagation-worker.js` `buildProfile()`
+1. `console.warn` in `radio-propagation-worker.js` `buildProfile()` —
+   was only an uncommitted working-tree change, reverted by restoring
+   the file to its committed state.
 
-**Items to keep:**
+## Items kept (no action needed)
+
 - All `vendor/itm/` commits (WASM migration, clean and correct)
-- Unfiltered mode (new feature)
-- Row-major partitioning (improvement)
+- Unfiltered mode (new feature, not debug cruft)
+- Row-major Phase 3 partitioning (improvement over angular slices)
 - Elapsed timer (UI feature)
 - All adaptive strategy commits (out of scope per instructions)
 
-The audit found minimal phantom-bug-chasing drift — essentially just
-one diagnostic `console.warn`. The ITM port itself (`vendor/itm/`) was
-never modified during the dead-zone investigation.
+## Summary
+
+The audit found minimal phantom-bug-chasing drift. The ITM port itself
+(`vendor/itm/`) was never modified during the dead-zone investigation —
+all dead-zone attempts (1-5) only touched the adaptive strategy logic in
+`radio-worker.js`. The sole ITM-path artifact was a diagnostic
+`console.warn` in an uncommitted change to `radio-propagation-worker.js`,
+which has been removed.
