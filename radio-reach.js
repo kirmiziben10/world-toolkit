@@ -27,6 +27,7 @@
     propWorkers: [],
     canvasLayer: null,
     running: false,
+    startTime: 0,
   };
 
   // ===== DOM refs (cached on init) =====
@@ -34,7 +35,7 @@
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput,
-      controlsPanel, controlsToggle, legendEl;
+      controlsPanel, controlsToggle, legendEl, unfilteredCheck;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -59,6 +60,7 @@
     legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
+    unfilteredCheck = document.getElementById('radio-unfiltered');
 
     analyzeBtnEl.addEventListener('click', startAnalysis);
     clearBtnEl.addEventListener('click', clearAll);
@@ -202,6 +204,11 @@
     txPowerInput.value = txPowerW;
 
     radioState.running = true;
+    radioState.startTime = performance.now();
+    radioState._timerInterval = setInterval(function () {
+      var el = document.getElementById('radio-elapsed');
+      if (el) el.textContent = formatElapsed(performance.now() - radioState.startTime);
+    }, 100);
     analyzeBtnEl.disabled = true;
     clearBtnEl.hidden = true;
     statsPanelEl.hidden = true;
@@ -251,6 +258,7 @@
       zoom: ANALYSIS_ZOOM,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
+      unfiltered: unfilteredCheck.checked,
     });
   }
 
@@ -339,6 +347,7 @@
     radioState._propTotalEvaluated = 0;
     radioState._propSliceEval = {};
     radioState._propOrchestratorTiles = msg.tilesUsed;
+    radioState._unfiltered = msg.txParams.unfiltered;
     radioState._propWorkerCount = Math.min(PROP_WORKER_COUNT, slices.length);
 
     // Terminate any lingering propagation workers
@@ -404,7 +413,8 @@
           freqMHz: txParams.freqMHz,
           txPowerW: txParams.txPowerW,
           zoom: txParams.zoom,
-          mpp: txParams.mpp
+          mpp: txParams.mpp,
+          unfiltered: radioState._unfiltered
         });
       }
     }
@@ -445,6 +455,11 @@
 
   function handleDone(stats) {
     radioState.running = false;
+    if (radioState._timerInterval) {
+      clearInterval(radioState._timerInterval);
+      radioState._timerInterval = null;
+    }
+    var elapsed = performance.now() - radioState.startTime;
     analyzeBtnEl.disabled = false;
     clearBtnEl.hidden = false;
     progressOverlayEl.hidden = true;
@@ -467,6 +482,7 @@
       t('radioCellsEvaluated', { n: stats.cellsEvaluated }) + '<br>' +
       t('radioMaxReach', { km: maxReachKm }) + '<br>' +
       t('radioWorkerCount', { n: workerCount }) + '<br>' +
+      t('radioElapsed', { time: formatElapsed(elapsed) }) + '<br>' +
       '<span class="radio-stat-strong">&#9632;</span> ' + t('radioStrongArea', { km2: strongAreaKm2 }) + '<br>' +
       '<span class="radio-stat-usable">&#9632;</span> ' + t('radioUsableArea', { km2: usableAreaKm2 }) + '<br>' +
       '<span class="radio-stat-marginal">&#9632;</span> ' + t('radioMarginalArea', { km2: marginalAreaKm2 }) +
@@ -484,6 +500,10 @@
 
   function handleError(msg) {
     radioState.running = false;
+    if (radioState._timerInterval) {
+      clearInterval(radioState._timerInterval);
+      radioState._timerInterval = null;
+    }
     analyzeBtnEl.disabled = radioState.lat === null;
     progressOverlayEl.hidden = true;
 
@@ -512,6 +532,10 @@
     }
     terminatePropWorkers();
     radioState.running = false;
+    if (radioState._timerInterval) {
+      clearInterval(radioState._timerInterval);
+      radioState._timerInterval = null;
+    }
     radioState.lat = null;
     radioState.lng = null;
 
@@ -729,6 +753,15 @@
     var div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  function formatElapsed(ms) {
+    var s = Math.floor(ms / 1000);
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    var frac = Math.floor((ms % 1000) / 100);
+    if (m > 0) return m + 'm ' + s + '.' + frac + 's';
+    return s + '.' + frac + 's';
   }
 
 })();

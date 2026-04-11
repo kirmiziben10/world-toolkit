@@ -143,5 +143,7 @@
   "radioAborted": "Analiz iptal edildi",
   "radioWasmRequired": "Radyo Erişim için WebAssembly gereklidir. Tarayıcınız desteklemiyor olabilir veya WASM modülü yüklenemedi. Ayrıntılar için tarayıcı konsolunu açın.",
   "radioClampedNotice": "({{km}} km ile sınırlandı — bu güç/frekansta mümkün olan maksimum)",
+  "radioUnfiltered": "Filtresiz (maskeleme/sınırlama yok)",
+  "radioElapsed": "Süre: {{time}}",
   "skipTutorial": "Eğitimi atla"
 }

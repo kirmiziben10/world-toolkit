@@ -368,6 +368,13 @@
                 <option value="430" data-i18n="radioFreqUHF">UHF 70cm (430 MHz)</option>
               </select>
             </div>
+
+            <div class="control-group control-group-full">
+              <label class="radio-checkbox-label">
+                <input type="checkbox" id="radio-unfiltered">
+                <span data-i18n="radioUnfiltered">Unfiltered</span>
+              </label>
+            </div>
           </div>
 
           <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
@@ -411,6 +418,7 @@
           <div class="progress-spinner"></div>
           <h3 data-i18n="radioAnalyzing">Analyzing Coverage</h3>
           <p id="radio-progress-text" data-i18n="preparing">Preparing...</p>
+          <p id="radio-elapsed" class="radio-elapsed"></p>
           <div class="progress-track">
             <div id="radio-progress-bar" class="progress-fill"></div>
           </div>

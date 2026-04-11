@@ -143,5 +143,7 @@
   "radioAborted": "Analysis aborted",
   "radioWasmRequired": "Radio Reach requires WebAssembly. Your browser may not support it, or the WASM module failed to load. Open the browser console for details.",
   "radioClampedNotice": "(capped at {{km}} km — max possible at this power/frequency)",
+  "radioUnfiltered": "Unfiltered (no masking/clamp)",
+  "radioElapsed": "Elapsed: {{time}}",
   "skipTutorial": "Skip tutorial"
 }

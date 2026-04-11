@@ -37,6 +37,7 @@ var antennaHeight = 10;
 var radiusM = 30000;
 var freqMHz = 144;
 var txPowerW = 5;
+var unfilteredMode = false;
 
 // Pending tile resolution
 var pendingTileResolve = null;
@@ -195,6 +196,7 @@ function handleStart(msg) {
   mpp = metersPerPixel(txLat, zoom);
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
+  unfilteredMode = msg.unfiltered || false;
   tileStore.clear();
   tilesUsed = 0;
 
@@ -203,16 +205,9 @@ function handleStart(msg) {
     txElevation = getElevation(txLat, txLng);
     if (txElevation === null) txElevation = 0;
 
-    runPhase1(function (points) {
-      if (points.length === 0) {
-        self.postMessage({ type: 'done', stats: {
-          tilesUsed: tilesUsed, cellsEvaluated: 0,
-          strongCount: 0, usableCount: 0, marginalCount: 0, maxReachM: 0
-        }});
-        return;
-      }
-      runPhase2(points, function (mask, mw, mh, totalCells) {
-        // Emit coverage bounds for bitmap layer
+    if (unfilteredMode) {
+      self.postMessage({ type: 'phase1Done', count: 0 });
+      runPhase2Unfiltered(function (mask, mw, mh, totalCells) {
         self.postMessage({
           type: 'coverageBounds',
           minLat: globalPixelYToLat(maskOriginGlobalY + mh),
@@ -224,7 +219,29 @@ function handleStart(msg) {
         });
         runPhase3(mask, mw, mh, totalCells);
       });
-    });
+    } else {
+      runPhase1(function (points) {
+        if (points.length === 0) {
+          self.postMessage({ type: 'done', stats: {
+            tilesUsed: tilesUsed, cellsEvaluated: 0,
+            strongCount: 0, usableCount: 0, marginalCount: 0, maxReachM: 0
+          }});
+          return;
+        }
+        runPhase2(points, function (mask, mw, mh, totalCells) {
+          self.postMessage({
+            type: 'coverageBounds',
+            minLat: globalPixelYToLat(maskOriginGlobalY + mh),
+            maxLat: globalPixelYToLat(maskOriginGlobalY),
+            minLng: globalPixelXToLng(maskOriginGlobalX),
+            maxLng: globalPixelXToLng(maskOriginGlobalX + mw),
+            widthPx: mw,
+            heightPx: mh
+          });
+          runPhase3(mask, mw, mh, totalCells);
+        });
+      });
+    }
   });
 }
 
@@ -320,6 +337,37 @@ function runPhase1(callback) {
 }
 
 // ===== Phase 2: Build evaluation mask =====
+
+function runPhase2Unfiltered(callback) {
+  // Build a full circular mask covering the entire requested radius — no LOS, no clamping
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+  var radiusPx = Math.ceil(radiusM / mpp);
+  var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+
+  maskOriginGlobalX = Math.floor(txGX) - radiusPx - bufferPx;
+  maskOriginGlobalY = Math.floor(txGY) - radiusPx - bufferPx;
+  maskW = (radiusPx + bufferPx) * 2 + 1;
+  maskH = (radiusPx + bufferPx) * 2 + 1;
+
+  var mask = new Uint8Array(maskW * maskH);
+  var totalCells = 0;
+
+  for (var py = 0; py < maskH; py++) {
+    for (var px = 0; px < maskW; px++) {
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
+      if (dist <= radiusM) {
+        mask[py * maskW + px] = 1;
+        totalCells++;
+      }
+    }
+  }
+
+  self.postMessage({ type: 'phase2Done', totalCells: totalCells });
+  callback(mask, maskW, maskH, totalCells);
+}
 
 function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
   var marginDb = 10 * Math.log10(txPowerW) + 140;
@@ -446,41 +494,37 @@ function dilateMask(mask, w, h, radius) {
 
 // ===== Phase 3: Partition mask cells and delegate to propagation workers =====
 // Instead of evaluating ITM here, we collect all 1-cells from the mask,
-// partition them by angular slice around the TX, and send them to the main
+// partition them into contiguous row-major chunks, and send them to the main
 // thread which spawns dedicated propagation workers.
 
-var SLICE_COUNT = 4;  // angular partitions (0-90°, 90-180°, 180-270°, 270-360°)
-
 function runPhase3(mask, mw, mh, totalCells) {
-  // Compute TX position in mask pixel space
-  var txPxX = lngToGlobalPixelX(txLng) - maskOriginGlobalX;
-  var txPxY = latToGlobalPixelY(txLat) - maskOriginGlobalY;
-
-  // Collect all 1-cells and assign to angular slices
-  var slices = [];
-  for (var s = 0; s < SLICE_COUNT; s++) slices.push([]);
-
-  var sliceAngle = (2 * Math.PI) / SLICE_COUNT;
-
+  // Collect all 1-cells in row-major order (top-left → bottom-right)
+  var allCells = [];
   for (var py = 0; py < mh; py++) {
     for (var px = 0; px < mw; px++) {
       if (!mask[py * mw + px]) continue;
-
-      var dx = px - txPxX;
-      var dy = py - txPxY;
-      var angle = Math.atan2(dy, dx); // -PI to PI
-      if (angle < 0) angle += 2 * Math.PI; // 0 to 2PI
-
-      var sliceIdx = Math.floor(angle / sliceAngle);
-      if (sliceIdx >= SLICE_COUNT) sliceIdx = SLICE_COUNT - 1;
-
-      slices[sliceIdx].push({
+      allCells.push({
         cellX: px,
         cellY: py,
         lat: globalPixelYToLat(maskOriginGlobalY + py),
         lng: globalPixelXToLng(maskOriginGlobalX + px)
       });
     }
+  }
+
+  // Determine slice count: use up to 4 slices, but no more than totalCells
+  var sliceCount = Math.min(4, allCells.length);
+  if (sliceCount < 1) sliceCount = 1;
+
+  // Divide cells into sliceCount contiguous chunks
+  var slices = [];
+  var baseSize = Math.floor(allCells.length / sliceCount);
+  var remainder = allCells.length % sliceCount;
+  var offset = 0;
+  for (var s = 0; s < sliceCount; s++) {
+    var chunkSize = baseSize + (s < remainder ? 1 : 0);
+    slices.push(allCells.slice(offset, offset + chunkSize));
+    offset += chunkSize;
   }
 
   self.postMessage({
@@ -495,7 +539,8 @@ function runPhase3(mask, mw, mh, totalCells) {
       freqMHz: freqMHz,
       txPowerW: txPowerW,
       zoom: zoom,
-      mpp: mpp
+      mpp: mpp,
+      unfiltered: unfilteredMode
     },
     tilesUsed: tilesUsed
   });

@@ -1757,15 +1757,30 @@ a.action-btn {
 /* Radio progress overlay (mirrors #progress-overlay) */
 #radio-progress-overlay {
   position: absolute;
-  inset: 0;
+  top: 10px;
+  right: 10px;
   z-index: 9000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 40, 80, 0.35);
-  backdrop-filter: blur(3px);
+  pointer-events: none;
 }
 #radio-progress-overlay[hidden] { display: none; }
+#radio-progress-overlay .progress-card {
+  pointer-events: auto;
+  max-width: 260px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1.5px solid #D5B456;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+#radio-progress-overlay .progress-card h3 {
+  font-size: 13px;
+  margin: 0 0 4px 0;
+}
+#radio-progress-overlay .progress-card p {
+  font-size: 11px;
+  margin: 0 0 8px 0;
+}
 
 /* Radio Reach transmitter marker */
 .radio-tx-marker {
@@ -1812,6 +1827,35 @@ a.action-btn {
 .radio-legend-strong  { background: rgba(34, 197, 94, 0.7); }
 .radio-legend-usable  { background: rgba(163, 230, 53, 0.65); }
 .radio-legend-marginal { background: rgba(250, 204, 21, 0.6); }
+
+/* Radio checkbox label */
+.radio-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dark);
+  cursor: pointer;
+  user-select: none;
+}
+.radio-checkbox-label input[type="checkbox"] {
+  accent-color: #D5B456;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+.control-group-full {
+  grid-column: 1 / -1;
+}
+
+/* Radio elapsed timer */
+.radio-elapsed {
+  font-size: 11px;
+  color: #666;
+  margin: 0 0 6px 0;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Radio stats band color indicators */
 .radio-stat-strong  { color: #22c55e; }
