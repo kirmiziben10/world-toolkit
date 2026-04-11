@@ -35,7 +35,8 @@
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput,
-      controlsPanel, controlsToggle, legendEl, unfilteredCheck;
+      controlsPanel, controlsToggle, legendEl, unfilteredCheck,
+      radarSweepCheck, adaptiveCullingCheck, itmEngineSelect;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -61,6 +62,9 @@
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
     unfilteredCheck = document.getElementById('radio-unfiltered');
+    radarSweepCheck = document.getElementById('radio-radar-sweep');
+    adaptiveCullingCheck = document.getElementById('radio-adaptive-culling');
+    itmEngineSelect = document.getElementById('radio-itm-engine');
 
     analyzeBtnEl.addEventListener('click', startAnalysis);
     clearBtnEl.addEventListener('click', clearAll);
@@ -196,7 +200,7 @@
     if (radioState.lat === null || radioState.running) return;
 
     var antennaHeight = clampNumber(antennaInput.value, 0, 500, 10);
-    var radiusKm = clampNumber(radiusInput.value, 5, 100, 30);
+    var radiusKm = clampNumber(radiusInput.value, 5, 1000, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
     var freqMHz = parseFloat(frequencySelect.value);
     antennaInput.value = antennaHeight;

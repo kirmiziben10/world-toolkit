@@ -356,7 +356,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
               <div class="radio-input-row">
-                <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
+                <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
                 <span class="radio-unit">km</span>
               </div>
             </div>
@@ -374,6 +374,28 @@
                 <input type="checkbox" id="radio-unfiltered">
                 <span data-i18n="radioUnfiltered">Unfiltered</span>
               </label>
+            </div>
+
+            <div class="control-group control-group-full">
+              <label class="radio-checkbox-label">
+                <input type="checkbox" id="radio-radar-sweep">
+                <span data-i18n="radioRadarSweep">Radar Sweep Mode</span>
+              </label>
+            </div>
+
+            <div class="control-group control-group-full">
+              <label class="radio-checkbox-label">
+                <input type="checkbox" id="radio-adaptive-culling">
+                <span data-i18n="radioAdaptiveCulling">Adaptive Culling</span>
+              </label>
+            </div>
+
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioItmEngine">ITM Engine</span>
+              <select id="radio-itm-engine" class="radio-select">
+                <option value="wasm" selected>WASM</option>
+                <option value="js">JS</option>
+              </select>
             </div>
           </div>
 
