@@ -302,6 +302,7 @@ function processSlice(cells, totalCells) {
     requestTilesAndRun(neededTiles, function () {
       for (var ci = 0; ci < chunk.length; ci++) {
         var cell = chunk[ci];
+        evaluated++;
 
         var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
         if (!result) continue;
@@ -326,7 +327,6 @@ function processSlice(cells, totalCells) {
         var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
         if (distM > maxReachM) maxReachM = distM;
 
-        evaluated++;
         batchCells.push({ cellX: cell.cellX, cellY: cell.cellY, band: band });
 
         if (batchCells.length >= COVERAGE_BATCH_SIZE) {
