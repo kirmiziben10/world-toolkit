@@ -164,9 +164,9 @@ function buildProfile(lat1, lng1, lat2, lng2) {
 }
 
 function collectChunkTiles(cells, startIdx, endIdx) {
-  // Find bbox of chunk cells + TX
-  var minLat = txLat, maxLat = txLat;
-  var minLng = txLng, maxLng = txLng;
+  // Find bbox of chunk cells only (not TX) for corner ray tracing
+  var minLat = Infinity, maxLat = -Infinity;
+  var minLng = Infinity, maxLng = -Infinity;
 
   for (var i = startIdx; i < endIdx; i++) {
     var c = cells[i];
@@ -176,17 +176,58 @@ function collectChunkTiles(cells, startIdx, endIdx) {
     if (c.lng > maxLng) maxLng = c.lng;
   }
 
-  var txMin = lngToTileX(minLng, zoom);
-  var txMax = lngToTileX(maxLng, zoom);
-  var tyMin = latToTileY(maxLat, zoom);
-  var tyMax = latToTileY(minLat, zoom);
-
+  var seen = {};
   var tiles = [];
-  for (var ty = tyMin; ty <= tyMax; ty++) {
-    for (var tx = txMin; tx <= txMax; tx++) {
-      tiles.push({ z: zoom, x: tx, y: ty });
+
+  function addTile(tz, tx, ty) {
+    var key = tz + '/' + tx + '/' + ty;
+    if (!seen[key]) {
+      seen[key] = true;
+      tiles.push({ z: tz, x: tx, y: ty });
     }
   }
+
+  // Collect tiles along a ray from TX to a target point using Bresenham-style stepping
+  function traceRayTiles(toLat, toLng) {
+    var x0 = lngToTileX(txLng, zoom);
+    var y0 = latToTileY(txLat, zoom);
+    var x1 = lngToTileX(toLng, zoom);
+    var y1 = latToTileY(toLat, zoom);
+    addTile(zoom, x0, y0);
+    addTile(zoom, x1, y1);
+
+    var dx = Math.abs(x1 - x0);
+    var dy = Math.abs(y1 - y0);
+    var sx = x0 < x1 ? 1 : -1;
+    var sy = y0 < y1 ? 1 : -1;
+    var err = dx - dy;
+
+    var cx = x0, cy = y0;
+    while (cx !== x1 || cy !== y1) {
+      var e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; cx += sx; }
+      if (e2 < dx)  { err += dx; cy += sy; }
+      addTile(zoom, cx, cy);
+    }
+  }
+
+  // Trace rays from TX to the four geographic corners of the chunk
+  traceRayTiles(minLat, minLng);
+  traceRayTiles(minLat, maxLng);
+  traceRayTiles(maxLat, minLng);
+  traceRayTiles(maxLat, maxLng);
+
+  // Also include the chunk's own tiles directly (cells need their own tile data)
+  var chunkTxMin = lngToTileX(minLng, zoom);
+  var chunkTxMax = lngToTileX(maxLng, zoom);
+  var chunkTyMin = latToTileY(maxLat, zoom);
+  var chunkTyMax = latToTileY(minLat, zoom);
+  for (var ty = chunkTyMin; ty <= chunkTyMax; ty++) {
+    for (var tx = chunkTxMin; tx <= chunkTxMax; tx++) {
+      addTile(zoom, tx, ty);
+    }
+  }
+
   return tiles;
 }
 
