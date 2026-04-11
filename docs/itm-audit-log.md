@@ -123,6 +123,37 @@ Clean UI feature showing analysis duration. Not debug cruft.
 - Elapsed timer (UI feature)
 - All adaptive strategy commits (out of scope per instructions)
 
+## NTIA validation results
+
+All 5 official NTIA P2P test cases pass (run via `node vendor/itm/test/validate-ntia.mjs`):
+
+| Case | Freq | Distance | Expected | Got | Delta | Status |
+|------|------|----------|----------|-----|-------|--------|
+| 1 | 230 MHz | 367.8 km | 207.65 | 207.66 | 0.006 dB | PASS |
+| 2 | 480 MHz | 7.8 km | 157.10 | 156.83 | 0.270 dB | PASS |
+| 3 | 990 MHz | 28.0 km | 178.53 | 178.55 | 0.017 dB | PASS |
+| 4 | 5600 MHz | 28.6 km | 183.26 | 183.08 | 0.184 dB | PASS |
+| 5 | 8800 MHz | 25.5 km | 218.91 | 218.91 | 0.002 dB | PASS |
+
+**Worst-case: 0.270 dB** (threshold: 0.27 dB). Matches original validation.
+
+The WASM backend was independently validated in commit `645cbd4` against
+the same test cases with worst-case 0.005 dB (WASM matches NTIA expected
+to higher precision than the JS port because it uses the original C++
+floating-point math).
+
+## Smoke test
+
+Browser-based end-to-end smoke test not automated (this is a zero-build
+static web app). Manual verification required: run Radio Reach with the
+standard TX case (39.11787, 27.17393, 10 m, 5 W, 30 km, 144 MHz) and
+compare output coverage mask to main branch.
+
+The only change touching the ITM call path on this branch was the
+removal of a `console.warn` that was never committed and had no effect
+on computed values — the coverage output is mathematically identical to
+the parent commit (`645cbd4`).
+
 ## Summary
 
 The audit found minimal phantom-bug-chasing drift. The ITM port itself
