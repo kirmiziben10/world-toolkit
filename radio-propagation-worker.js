@@ -15,6 +15,7 @@ var CHUNK_SIZE = 64;
 var COVERAGE_BATCH_SIZE = 500;
 var RX_HEIGHT_M = 2;
 var RX_SENSITIVITY_DBW = -140;
+var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
 
 var metersPerPixel = self.TerrainTiles.metersPerPixel;
 var lngToTileX = self.TerrainTiles.lngToTileX;
@@ -35,6 +36,7 @@ var antennaHeight = 10;
 var freqMHz = 144;
 var txPowerW = 5;
 var sliceId = 0;
+var adaptiveCulling = false;
 
 // ===== Message handler =====
 var startQueue = [];
@@ -354,6 +356,7 @@ function handleStartInner(msg) {
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
+  adaptiveCulling = msg.adaptiveCulling || false;
   maskOriginGlobalX = msg.maskOriginGlobalX;
   maskOriginGlobalY = msg.maskOriginGlobalY;
 
@@ -416,8 +419,43 @@ function processSlice(cells, totalCells) {
     batchCount = 0;
   }
 
+  function emitCell(cell, band) {
+    var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    if (distM > maxReachM) maxReachM = distM;
+
+    if (band === 0) strongCount++;
+    else if (band === 1) usableCount++;
+    else marginalCount++;
+
+    var bi = batchCount * 3;
+    batchBuf[bi]     = cell.cellX;
+    batchBuf[bi + 1] = cell.cellY;
+    batchBuf[bi + 2] = band;
+    batchCount++;
+
+    if (batchCount >= COVERAGE_BATCH_SIZE) {
+      flushBatch(evaluated / totalCells);
+    }
+  }
+
+  function evaluateCell(cell) {
+    var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
+    if (!result) return -Infinity;
+
+    var pathLoss;
+    try {
+      var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
+      pathLoss = computeFn(
+        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
+      );
+    } catch (e) {
+      return -Infinity;
+    }
+
+    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
+  }
+
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.
-  // Group by (cellX >> 6, cellY >> 6) to match CHUNK_SIZE = 64.
   var chunkMap = {};
   for (var i = 0; i < cells.length; i++) {
     var c = cells[i];
@@ -457,47 +495,95 @@ function processSlice(cells, totalCells) {
     var neededTiles = collectChunkTiles(chunk, 0, chunk.length);
 
     requestTilesAndRun(neededTiles, function () {
-      for (var ci = 0; ci < chunk.length; ci++) {
-        var cell = chunk[ci];
-        evaluated++;
+      if (adaptiveCulling) {
+        processChunkCoarseToFine(chunk);
+      } else {
+        processChunkStandard(chunk);
+      }
+      setTimeout(processNextChunk, 0);
+    });
+  }
 
-        var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
-        if (!result) continue;
+  // ===== Standard 1:1 per-cell evaluation =====
+  function processChunkStandard(chunk) {
+    for (var ci = 0; ci < chunk.length; ci++) {
+      var cell = chunk[ci];
+      evaluated++;
 
-        var pathLoss;
-        try {
-          var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
-          pathLoss = computeFn(
-            result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
-          );
-        } catch (e) {
-          continue;
-        }
+      var margin = evaluateCell(cell);
+      if (margin === -Infinity) continue;
 
-        var margin = txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
+      var band;
+      if (margin > 20)      band = 0;
+      else if (margin >= 5) band = 1;
+      else if (margin >= 0) band = 2;
+      else continue;
 
-        var band;
-        if (margin > 20)      { band = 0; strongCount++; }
-        else if (margin >= 5) { band = 1; usableCount++; }
-        else if (margin >= 0) { band = 2; marginalCount++; }
-        else continue;
+      emitCell(cell, band);
+    }
+  }
 
-        var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
-        if (distM > maxReachM) maxReachM = distM;
+  // ===== Coarse-to-fine 2-pass evaluation =====
+  function processChunkCoarseToFine(chunk) {
+    // Sub-group cells into 4x4 blocks within this chunk
+    var blockMap = {};
+    for (var ci = 0; ci < chunk.length; ci++) {
+      var cell = chunk[ci];
+      var bk = (cell.cellX >> CULL_BLOCK_SHIFT) + ',' + (cell.cellY >> CULL_BLOCK_SHIFT);
+      if (!blockMap[bk]) blockMap[bk] = [];
+      blockMap[bk].push(cell);
+    }
 
-        var bi = batchCount * 3;
-        batchBuf[bi]     = cell.cellX;
-        batchBuf[bi + 1] = cell.cellY;
-        batchBuf[bi + 2] = band;
-        batchCount++;
+    var blockKeys = Object.keys(blockMap);
+    for (var bi = 0; bi < blockKeys.length; bi++) {
+      var block = blockMap[blockKeys[bi]];
 
-        if (batchCount >= COVERAGE_BATCH_SIZE) {
-          flushBatch(evaluated / totalCells);
+      // Pass 1: Pick highest-elevation cell as scout
+      var scoutCell = block[0];
+      var maxElev = -Infinity;
+      for (var j = 0; j < block.length; j++) {
+        var elev = getElevation(block[j].lat, block[j].lng);
+        if (elev !== null && elev > maxElev) {
+          maxElev = elev;
+          scoutCell = block[j];
         }
       }
 
-      setTimeout(processNextChunk, 0);
-    });
+      evaluated++; // count scout evaluation
+      var scoutMargin = evaluateCell(scoutCell);
+
+      if (scoutMargin < 0) {
+        // Dead block: count all remaining cells as evaluated, skip processing
+        evaluated += block.length - 1;
+        continue;
+      }
+
+      // Pass 2: Fine-fill alive block — evaluate every cell
+      // The scout cell was already evaluated; emit it if it has signal
+      if (scoutMargin !== -Infinity) {
+        var scoutBand;
+        if (scoutMargin > 20)      scoutBand = 0;
+        else if (scoutMargin >= 5) scoutBand = 1;
+        else                       scoutBand = 2;
+        emitCell(scoutCell, scoutBand);
+      }
+
+      for (var j = 0; j < block.length; j++) {
+        if (block[j] === scoutCell) continue; // already evaluated
+        evaluated++;
+
+        var margin = evaluateCell(block[j]);
+        if (margin === -Infinity) continue;
+
+        var band;
+        if (margin > 20)      band = 0;
+        else if (margin >= 5) band = 1;
+        else if (margin >= 0) band = 2;
+        else continue;
+
+        emitCell(block[j], band);
+      }
+    }
   }
 
   processNextChunk();
