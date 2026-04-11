@@ -4,8 +4,6 @@
 // Phase 3: Partitions mask cells into angular slices and delegates
 //          to propagation workers spawned by the main thread
 importScripts('terrain-tiles.js');
-importScripts('vendor/itm/itm.js');
-importScripts('vendor/itm/itm-wrapper.js');
 
 var TILE_SIZE = self.TerrainTiles.TILE_SIZE;       // 256
 var EARTH_RADIUS = 6378137;

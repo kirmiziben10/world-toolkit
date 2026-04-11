@@ -4,7 +4,8 @@
 // Tile data is fetched via the main thread proxy (same protocol as the
 // orchestrator worker).
 importScripts('terrain-tiles.js');
-importScripts('vendor/itm/itm.js');
+importScripts('vendor/itm/itm-glue.js');
+importScripts('vendor/itm/itm-loader.js');
 importScripts('vendor/itm/itm-wrapper.js');
 
 var TILE_SIZE = self.TerrainTiles.TILE_SIZE;       // 256
@@ -184,9 +185,31 @@ function collectChunkTiles(cells, startIdx, endIdx) {
   return tiles;
 }
 
+// ===== WASM init state =====
+var wasmReady = false;
+var wasmInitPromise = null;
+
+function ensureWasmReady() {
+  if (wasmReady) return Promise.resolve();
+  if (wasmInitPromise) return wasmInitPromise;
+  wasmInitPromise = self.initITM().then(function () {
+    wasmReady = true;
+  });
+  return wasmInitPromise;
+}
+
 // ===== Entry point =====
 
 function handleStart(msg) {
+  ensureWasmReady().then(function () {
+    handleStartInner(msg);
+  }).catch(function (err) {
+    self.postMessage({ type: 'error', message: 'WASM_INIT_FAILED', detail: err.message || String(err) });
+    onSliceFinished();
+  });
+}
+
+function handleStartInner(msg) {
   txLat = msg.txLat;
   txLng = msg.txLng;
   txElevation = msg.txElevation;
@@ -250,6 +273,7 @@ function processSlice(cells, totalCells) {
       self.postMessage({
         type: 'sliceDone',
         sliceId: sliceId,
+        itmBackend: typeof getITMBackend === 'function' ? getITMBackend() : 'unknown',
         stats: {
           evaluated: evaluated,
           reachable: strongCount + usableCount + marginalCount,
