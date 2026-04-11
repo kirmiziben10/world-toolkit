@@ -263,6 +263,7 @@
       freqMHz: freqMHz,
       txPowerW: txPowerW,
       unfiltered: unfilteredCheck.checked,
+      itmEngine: itmEngineSelect.value,
     });
   }
 
@@ -448,7 +449,8 @@
           txPowerW: txParams.txPowerW,
           zoom: txParams.zoom,
           mpp: txParams.mpp,
-          unfiltered: radioState._unfiltered
+          unfiltered: radioState._unfiltered,
+          itmEngine: txParams.itmEngine
         }, [sliceMaskCopy.buffer]);
       }
     }

@@ -260,13 +260,86 @@ function ensureWasmReady() {
   return wasmInitPromise;
 }
 
+// ===== JS fallback init state =====
+var jsReady = false;
+var jsComputeFn = null;
+
+function ensureJSReady() {
+  if (jsReady) return Promise.resolve();
+  return new Promise(function (resolve, reject) {
+    try {
+      importScripts('vendor/itm/itm-js-reference.js');
+    } catch (e) {
+      reject(new Error('Failed to load JS ITM reference: ' + e.message));
+      return;
+    }
+    if (!self.ITM || typeof self.ITM.ITM_P2P_TLS !== 'function') {
+      reject(new Error('JS ITM reference loaded but ITM.ITM_P2P_TLS not found'));
+      return;
+    }
+
+    // Hardcoded params matching the WASM loader
+    var CLIMATE   = 5;
+    var N_0       = 301;
+    var POL       = 1;
+    var EPSILON   = 15;
+    var SIGMA     = 0.008;
+    var MDVAR     = 12;
+    var TIME      = 50;
+    var LOCATION  = 50;
+    var SITUATION = 50;
+
+    var itmRef = self.ITM;
+
+    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+      var nSamples = profile.length;
+      var N = nSamples - 1;
+      // Build PFL array: [N, spacingM, elev0, ..., elevN]
+      var pfl = new Array(nSamples + 2);
+      pfl[0] = N;
+      pfl[1] = spacingM;
+      for (var i = 0; i < nSamples; i++) {
+        pfl[2 + i] = profile[i];
+      }
+
+      var result = itmRef.ITM_P2P_TLS(
+        txHeightM, rxHeightM, pfl,
+        CLIMATE, N_0, freqMHz,
+        POL, EPSILON, SIGMA,
+        MDVAR, TIME, LOCATION, SITUATION
+      );
+
+      if (result.error >= 1000) {
+        throw new Error('ITM JS error ' + result.error + ' (warnings: 0x' + result.warnings.toString(16) + ')');
+      }
+      return result.A__db;
+    };
+
+    jsReady = true;
+    resolve();
+  });
+}
+
+// ===== Active engine selection =====
+var activeEngine = 'wasm';  // 'wasm' or 'js'
+
 // ===== Entry point =====
 
 function handleStart(msg) {
-  ensureWasmReady().then(function () {
+  activeEngine = msg.itmEngine || 'wasm';
+
+  var initPromise;
+  if (activeEngine === 'js') {
+    initPromise = ensureJSReady();
+  } else {
+    initPromise = ensureWasmReady();
+  }
+
+  initPromise.then(function () {
     handleStartInner(msg);
   }).catch(function (err) {
-    self.postMessage({ type: 'error', message: 'WASM_INIT_FAILED', detail: err.message || String(err) });
+    var errType = activeEngine === 'js' ? 'JS_INIT_FAILED' : 'WASM_INIT_FAILED';
+    self.postMessage({ type: 'error', message: errType, detail: err.message || String(err) });
     onSliceFinished();
   });
 }
@@ -362,7 +435,7 @@ function processSlice(cells, totalCells) {
       self.postMessage({
         type: 'sliceDone',
         sliceId: sliceId,
-        itmBackend: typeof getITMBackend === 'function' ? getITMBackend() : 'unknown',
+        itmBackend: activeEngine,
         stats: {
           evaluated: evaluated,
           reachable: strongCount + usableCount + marginalCount,
@@ -393,7 +466,8 @@ function processSlice(cells, totalCells) {
 
         var pathLoss;
         try {
-          pathLoss = self.computeITMPathLoss(
+          var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
+          pathLoss = computeFn(
             result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
           );
         } catch (e) {

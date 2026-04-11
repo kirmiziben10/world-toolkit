@@ -38,6 +38,7 @@ var radiusM = 30000;
 var freqMHz = 144;
 var txPowerW = 5;
 var unfilteredMode = false;
+var itmEngine = 'wasm';
 
 // Pending tile resolution
 var pendingTileResolve = null;
@@ -197,6 +198,7 @@ function handleStart(msg) {
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
   unfilteredMode = msg.unfiltered || false;
+  itmEngine = msg.itmEngine || 'wasm';
   tileStore.clear();
   tilesUsed = 0;
 
@@ -517,7 +519,8 @@ function runPhase3(mask, mw, mh, totalCells) {
       txPowerW: txPowerW,
       zoom: zoom,
       mpp: mpp,
-      unfiltered: unfilteredMode
+      unfiltered: unfilteredMode,
+      itmEngine: itmEngine
     },
     tilesUsed: tilesUsed
   }, [maskCopy.buffer]);
