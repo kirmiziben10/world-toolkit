@@ -146,5 +146,6 @@
   "radioUnfiltered": "Filtresiz (maskeleme/sınırlama yok)",
   "radioElapsed": "Süre: {{time}}",
   "radioMemoryGuardrail": "Yarıçap çok büyük ({{mb}} MB). Radar Tarama Modunu etkinleştirin veya analiz yarıçapını küçültün.",
+  "radioSweepProgress": "Radar tarama: dilim {{done}} / {{total}}",
   "skipTutorial": "Eğitimi atla"
 }

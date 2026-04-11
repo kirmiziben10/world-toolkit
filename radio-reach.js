@@ -279,6 +279,8 @@
       txPowerW: txPowerW,
       unfiltered: unfilteredCheck.checked,
       itmEngine: itmEngineSelect.value,
+      radarSweep: radarSweepCheck.checked,
+      adaptiveCulling: adaptiveCullingCheck.checked,
     });
   }
 
@@ -365,11 +367,34 @@
     var maskW = msg.maskW;
     var maskH = msg.maskH;
     var txParams = msg.txParams;
+
+    // Track sweep state
+    if (msg.isRadarSweep) {
+      radioState._isRadarSweep = true;
+      radioState._sweepTotalWedges = msg.totalWedges;
+      if (!radioState._sweepAggStats) {
+        // Initialize aggregate stats on first wedge
+        radioState._sweepWedgesCompleted = 0;
+        radioState._sweepAggStats = {
+          evaluated: 0, strongCount: 0, usableCount: 0,
+          marginalCount: 0, maxReachM: 0, tilesUsed: 0
+        };
+        radioState._totalCells = 0;
+      }
+    }
+
     radioState._propTotalCells = msg.totalCells;
     radioState._propTotalEvaluated = 0;
     radioState._propSliceEval = {};
     radioState._propOrchestratorTiles = msg.tilesUsed;
     radioState._unfiltered = msg.txParams.unfiltered;
+
+    // Accumulate total cells across wedges for sweep mode
+    if (msg.isRadarSweep) {
+      radioState._totalCells += msg.totalCells;
+    } else {
+      radioState._totalCells = msg.totalCells;
+    }
 
     // Determine slice count: split mask into horizontal row-bands
     var sliceCount = Math.min(4, maskH);
@@ -405,7 +430,7 @@
       workerSlices[s % workerCount].push(slices[s]);
     }
 
-    // Track completion
+    // Track completion for this wedge/partition
     radioState._propSlicesDone = 0;
     radioState._propTotalSlices = slices.length;
     radioState._propAggStats = {
@@ -414,7 +439,7 @@
       usableCount: 0,
       marginalCount: 0,
       maxReachM: 0,
-      tilesUsed: msg.tilesUsed // start with orchestrator's tile count
+      tilesUsed: msg.tilesUsed
     };
 
     // Spawn workers
@@ -465,7 +490,8 @@
           zoom: txParams.zoom,
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered,
-          itmEngine: txParams.itmEngine
+          itmEngine: txParams.itmEngine,
+          adaptiveCulling: txParams.adaptiveCulling
         }, [sliceMaskCopy.buffer]);
       }
     }
@@ -483,17 +509,44 @@
 
     radioState._propSlicesDone++;
     if (radioState._propSlicesDone >= radioState._propTotalSlices) {
-      // All slices done — finalize
-      handleDone({
-        tilesUsed: agg.tilesUsed,
-        cellsEvaluated: agg.evaluated,
-        strongCount: agg.strongCount,
-        usableCount: agg.usableCount,
-        marginalCount: agg.marginalCount,
-        maxReachM: agg.maxReachM,
-        workerCount: radioState._propWorkerCount,
-        itmBackend: agg.itmBackend
-      });
+      // All slices for this partition are done
+      terminatePropWorkers();
+
+      if (radioState._isRadarSweep) {
+        // Accumulate into sweep-level stats
+        var sa = radioState._sweepAggStats;
+        sa.evaluated += agg.evaluated;
+        sa.strongCount += agg.strongCount;
+        sa.usableCount += agg.usableCount;
+        sa.marginalCount += agg.marginalCount;
+        sa.tilesUsed += agg.tilesUsed;
+        if (agg.maxReachM > sa.maxReachM) sa.maxReachM = agg.maxReachM;
+        if (agg.itmBackend) sa.itmBackend = agg.itmBackend;
+
+        radioState._sweepWedgesCompleted++;
+        var wedgePct = Math.round((radioState._sweepWedgesCompleted / radioState._sweepTotalWedges) * 100);
+        if (wedgePct > 99) wedgePct = 99;
+        progressBarEl.style.width = wedgePct + '%';
+        progressTextEl.textContent = t('radioSweepProgress', {
+          done: radioState._sweepWedgesCompleted,
+          total: radioState._sweepTotalWedges
+        });
+
+        // Signal orchestrator to advance to next wedge
+        radioState.worker.postMessage({ type: 'wedgeDone' });
+      } else {
+        // Standard (non-sweep) completion
+        handleDone({
+          tilesUsed: agg.tilesUsed,
+          cellsEvaluated: agg.evaluated,
+          strongCount: agg.strongCount,
+          usableCount: agg.usableCount,
+          marginalCount: agg.marginalCount,
+          maxReachM: agg.maxReachM,
+          workerCount: radioState._propWorkerCount,
+          itmBackend: agg.itmBackend
+        });
+      }
     }
   }
 
@@ -505,7 +558,25 @@
   }
 
   function handleDone(stats) {
+    // In sweep mode, the orchestrator's final 'done' message has zeroed stats;
+    // use the accumulated sweep stats instead
+    if (radioState._isRadarSweep && radioState._sweepAggStats) {
+      var sa = radioState._sweepAggStats;
+      stats = {
+        tilesUsed: sa.tilesUsed,
+        cellsEvaluated: sa.evaluated,
+        strongCount: sa.strongCount,
+        usableCount: sa.usableCount,
+        marginalCount: sa.marginalCount,
+        maxReachM: sa.maxReachM,
+        workerCount: radioState._propWorkerCount || 1,
+        itmBackend: sa.itmBackend
+      };
+    }
+
     radioState.running = false;
+    radioState._isRadarSweep = false;
+    radioState._sweepAggStats = null;
     if (radioState._timerInterval) {
       clearInterval(radioState._timerInterval);
       radioState._timerInterval = null;
@@ -551,6 +622,8 @@
 
   function handleError(msg) {
     radioState.running = false;
+    radioState._isRadarSweep = false;
+    radioState._sweepAggStats = null;
     if (radioState._timerInterval) {
       clearInterval(radioState._timerInterval);
       radioState._timerInterval = null;
@@ -583,6 +656,8 @@
     }
     terminatePropWorkers();
     radioState.running = false;
+    radioState._isRadarSweep = false;
+    radioState._sweepAggStats = null;
     if (radioState._timerInterval) {
       clearInterval(radioState._timerInterval);
       radioState._timerInterval = null;

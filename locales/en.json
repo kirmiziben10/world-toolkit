@@ -146,5 +146,6 @@
   "radioUnfiltered": "Unfiltered (no masking/clamp)",
   "radioElapsed": "Elapsed: {{time}}",
   "radioMemoryGuardrail": "Radius too large ({{mb}} MB). Enable Radar Sweep Mode or reduce the analysis radius.",
+  "radioSweepProgress": "Radar sweep: wedge {{done}} / {{total}}",
   "skipTutorial": "Skip tutorial"
 }
