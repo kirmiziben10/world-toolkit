@@ -699,7 +699,11 @@
 
   var RadioCoverageLayer = L.Layer.extend({
     initialize: function () {
-      this._overlay = null;
+      this._overlayA = null;
+      this._overlayB = null;
+      this._objectUrlA = null;
+      this._objectUrlB = null;
+      this._visibleOverlay = 'A';
       this._imageData = null;
       this._bandData = null;
       this._canvas = null;
@@ -715,7 +719,6 @@
       this._mercYBot = 0;
       this._refreshTimer = null;
       this._pendingCells = 0;
-      this._objectUrl = null;
     },
 
     onAdd: function (map) {
@@ -723,13 +726,21 @@
     },
 
     onRemove: function (map) {
-      if (this._overlay) {
-        map.removeLayer(this._overlay);
-        this._overlay = null;
+      if (this._overlayA) {
+        map.removeLayer(this._overlayA);
+        this._overlayA = null;
       }
-      if (this._objectUrl) {
-        URL.revokeObjectURL(this._objectUrl);
-        this._objectUrl = null;
+      if (this._overlayB) {
+        map.removeLayer(this._overlayB);
+        this._overlayB = null;
+      }
+      if (this._objectUrlA) {
+        URL.revokeObjectURL(this._objectUrlA);
+        this._objectUrlA = null;
+      }
+      if (this._objectUrlB) {
+        URL.revokeObjectURL(this._objectUrlB);
+        this._objectUrlB = null;
       }
       if (this._refreshTimer) {
         clearTimeout(this._refreshTimer);
@@ -760,6 +771,17 @@
 
       this._bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
       this._pendingCells = 0;
+
+      // Create both overlays for double buffering
+      var blankUrl = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      var overlayOpts = { interactive: false, zIndex: 450 };
+      if (this._overlayA) this._map.removeLayer(this._overlayA);
+      if (this._overlayB) this._map.removeLayer(this._overlayB);
+      if (this._objectUrlA) { URL.revokeObjectURL(this._objectUrlA); this._objectUrlA = null; }
+      if (this._objectUrlB) { URL.revokeObjectURL(this._objectUrlB); this._objectUrlB = null; }
+      this._overlayA = L.imageOverlay(blankUrl, this._bounds, Object.assign({ opacity: 1 }, overlayOpts)).addTo(this._map);
+      this._overlayB = L.imageOverlay(blankUrl, this._bounds, Object.assign({ opacity: 0 }, overlayOpts)).addTo(this._map);
+      this._visibleOverlay = 'A';
     },
 
     setCellByLatLng: function (lat, lng, band) {
@@ -805,13 +827,13 @@
     scheduleRefresh: function () {
       if (this._refreshTimer) return;
       var self = this;
-      if (this._pendingCells >= 5000) {
+      if (this._pendingCells >= 30000) {
         this._doRefresh();
       } else {
         this._refreshTimer = setTimeout(function () {
           self._refreshTimer = null;
           self._doRefresh();
-        }, 200);
+        }, 1000);
       }
     },
 
@@ -825,29 +847,57 @@
 
     _doRefresh: function () {
       if (!this._map || !this._imageData || !this._canvas) return;
+      if (!this._overlayA || !this._overlayB) return;
       this._pendingCells = 0;
 
       var ctx = this._canvas.getContext('2d');
       ctx.putImageData(this._imageData, 0, 0);
 
-      // Revoke old object URL
-      if (this._objectUrl) {
-        URL.revokeObjectURL(this._objectUrl);
-        this._objectUrl = null;
-      }
-
       var self = this;
+      var isA = this._visibleOverlay === 'A';
+
       this._canvas.toBlob(function (blob) {
         if (!self._map) return;
-        self._objectUrl = URL.createObjectURL(blob);
-        if (self._overlay) {
-          self._overlay.setUrl(self._objectUrl);
+        var newUrl = URL.createObjectURL(blob);
+
+        // Write to the staging (hidden) overlay
+        var staging = isA ? self._overlayB : self._overlayA;
+        staging.setUrl(newUrl);
+
+        var imgEl = staging.getElement();
+        var doSwap = function () {
+          if (!self._map) {
+            URL.revokeObjectURL(newUrl);
+            return;
+          }
+          // Make staging visible, hide current
+          staging.setOpacity(1);
+          (isA ? self._overlayA : self._overlayB).setOpacity(0);
+
+          // Revoke the old URL of the now-hidden overlay
+          var oldUrl = isA ? self._objectUrlA : self._objectUrlB;
+          if (oldUrl) URL.revokeObjectURL(oldUrl);
+
+          // Store new URL in the staging slot, clear the hidden slot
+          if (isA) {
+            self._objectUrlB = newUrl;
+            self._objectUrlA = null;
+          } else {
+            self._objectUrlA = newUrl;
+            self._objectUrlB = null;
+          }
+
+          // Flip visible tracker
+          self._visibleOverlay = isA ? 'B' : 'A';
+        };
+
+        if (imgEl) {
+          imgEl.addEventListener('load', function onLoad() {
+            imgEl.removeEventListener('load', onLoad);
+            doSwap();
+          });
         } else {
-          self._overlay = L.imageOverlay(self._objectUrl, self._bounds, {
-            opacity: 1,
-            interactive: false,
-            zIndex: 450
-          }).addTo(self._map);
+          doSwap();
         }
       });
     },
