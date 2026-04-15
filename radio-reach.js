@@ -36,6 +36,7 @@
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput,
+      resolutionSelect,
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
       radarSweepCheck, adaptiveCullingCheck, itmEngineSelect;
 
@@ -58,6 +59,7 @@
     antennaInput = document.getElementById('radio-antenna-height');
     radiusInput = document.getElementById('radio-radius');
     frequencySelect = document.getElementById('radio-frequency');
+    resolutionSelect = document.getElementById('radio-resolution');
     txPowerInput = document.getElementById('radio-tx-power');
     legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
@@ -204,6 +206,13 @@
     var radiusKm = clampNumber(radiusInput.value, 5, 1000, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
     var freqMHz = parseFloat(frequencySelect.value);
+    var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
+    var analysisZoom;
+    if (resVal === 'auto') {
+      analysisZoom = Math.min(12, Math.max(8, 12 - Math.floor(Math.log2(radiusKm / 30))));
+    } else {
+      analysisZoom = parseInt(resVal, 10);
+    }
     antennaInput.value = antennaHeight;
     radiusInput.value = radiusKm;
     txPowerInput.value = txPowerW;
@@ -211,7 +220,7 @@
     // Memory guardrail: abort if full-circle mask would exceed MAX_MASK_MB
     // and radar sweep is not enabled to break the work into wedges
     if (!radarSweepCheck.checked) {
-      var mppGuard = metersPerPixel(radioState.lat, ANALYSIS_ZOOM);
+      var mppGuard = metersPerPixel(radioState.lat, analysisZoom);
       var pixelRadius = (radiusKm * 1000) / mppGuard;
       var diameter = pixelRadius * 2;
       var requiredMB = (diameter * diameter) / (1024 * 1024);
@@ -223,6 +232,7 @@
     }
 
     radioState.running = true;
+    radioState.analysisZoom = analysisZoom;
     radioState.startTime = performance.now();
     radioState._timerInterval = setInterval(function () {
       var el = document.getElementById('radio-elapsed');
@@ -274,7 +284,7 @@
       lng: radioState.lng,
       antennaHeight: antennaHeight,
       radiusKm: radiusKm,
-      zoom: ANALYSIS_ZOOM,
+      zoom: analysisZoom,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
       unfiltered: unfilteredCheck.checked,
@@ -591,7 +601,7 @@
     }
 
     var maxReachKm = (stats.maxReachM / 1000).toFixed(1);
-    var mppVal = metersPerPixel(radioState.lat, ANALYSIS_ZOOM);
+    var mppVal = metersPerPixel(radioState.lat, radioState.analysisZoom || ANALYSIS_ZOOM);
     var pixelAreaKm2 = (mppVal * mppVal) / 1e6;
     var strongAreaKm2 = (stats.strongCount * pixelAreaKm2).toFixed(1);
     var usableAreaKm2 = (stats.usableCount * pixelAreaKm2).toFixed(1);

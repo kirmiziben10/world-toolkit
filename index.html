@@ -356,7 +356,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
               <div class="radio-input-row">
-                <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
+                <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
                 <span class="radio-unit">km</span>
               </div>
             </div>
@@ -369,32 +369,15 @@
               </select>
             </div>
 
-            <div class="control-group control-group-full">
-              <label class="radio-checkbox-label">
-                <input type="checkbox" id="radio-unfiltered">
-                <span data-i18n="radioUnfiltered">Unfiltered</span>
-              </label>
-            </div>
-
-            <div class="control-group control-group-full">
-              <label class="radio-checkbox-label">
-                <input type="checkbox" id="radio-radar-sweep">
-                <span data-i18n="radioRadarSweep">Radar Sweep Mode</span>
-              </label>
-            </div>
-
-            <div class="control-group control-group-full">
-              <label class="radio-checkbox-label">
-                <input type="checkbox" id="radio-adaptive-culling">
-                <span data-i18n="radioAdaptiveCulling">Adaptive Culling</span>
-              </label>
-            </div>
-
             <div class="control-group">
-              <span class="label-text" data-i18n="radioItmEngine">ITM Engine</span>
-              <select id="radio-itm-engine" class="radio-select">
-                <option value="wasm" selected>WASM</option>
-                <option value="js">JS</option>
+              <span class="label-text" data-i18n="radioResolution">Resolution</span>
+              <select id="radio-resolution" class="radio-select">
+                <option value="auto" selected data-i18n="radioResAuto">Auto</option>
+                <option value="12">z12 (~30 m/px)</option>
+                <option value="11">z11 (~60 m/px)</option>
+                <option value="10">z10 (~120 m/px)</option>
+                <option value="9">z9 (~240 m/px)</option>
+                <option value="8">z8 (~480 m/px)</option>
               </select>
             </div>
           </div>
@@ -440,7 +423,6 @@
           <div class="progress-spinner"></div>
           <h3 data-i18n="radioAnalyzing">Analyzing Coverage</h3>
           <p id="radio-progress-text" data-i18n="preparing">Preparing...</p>
-          <p id="radio-elapsed" class="radio-elapsed"></p>
           <div class="progress-track">
             <div id="radio-progress-bar" class="progress-fill"></div>
           </div>

@@ -119,6 +119,8 @@
   "radioFrequency": "Frekans",
   "radioFreqVHF": "VHF 2m (144 MHz)",
   "radioFreqUHF": "UHF 70cm (430 MHz)",
+  "radioResolution": "Çözünürlük",
+  "radioResAuto": "Otomatik",
   "radioTxPower": "Çıkış Gücü",
   "radioAnalyze": "Analiz Et",
   "radioClear": "Temizle",
