@@ -11,8 +11,18 @@
   var t = window.i18n.t;
   var ANALYSIS_ZOOM = 12;
   var EARTH_RADIUS = 6378137;
+  var MAX_RADIUS_KM = 1000;
   var MAX_TILES_LIMIT = 2000;
-  var MAX_MASK_MB = 300;
+  var MAX_BITMAP_MB = 300;
+  var COVERAGE_BUFFER_KM = 4;
+  var BROWSER_OVERHEAD_MB = 180;
+  var TILE_BYTES_PER_TILE = 256 * 256 * 4;
+  var PROP_WORKER_OVERHEAD_MB = 32;
+  var MEMORY_RISK_RATIO_WARN = 0.35;
+  var MEMORY_RISK_RATIO_BLOCK = 0.6;
+  var SWEEP_TILE_FETCH_CONCURRENCY = 4;
+  // ImageData (4 B/px) + band buffer (1 B/px) + canvas backing store (~4 B/px).
+  var BITMAP_BYTES_PER_PIXEL = 9;
   var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
 
   // Attribution strings
@@ -29,10 +39,13 @@
     canvasLayer: null,
     running: false,
     startTime: 0,
+    analysisToken: 0,
+    analysisTileCount: 0,
+    analysisTileKeys: null,
   };
 
   // ===== DOM refs (cached on init) =====
-  var coordsEl, instructionEl, analyzeBtnEl, clearBtnEl,
+  var coordsEl, instructionEl, warningEl, analyzeBtnEl, clearBtnEl,
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput,
@@ -49,6 +62,7 @@
   function init() {
     coordsEl = document.getElementById('radio-coords');
     instructionEl = document.getElementById('radio-instruction');
+    warningEl = document.getElementById('radio-warning');
     analyzeBtnEl = document.getElementById('radio-analyze-btn');
     clearBtnEl = document.getElementById('radio-clear-btn');
     progressOverlayEl = document.getElementById('radio-progress-overlay');
@@ -76,6 +90,9 @@
     document.getElementById('radio-close-stats').addEventListener('click', function () {
       statsPanelEl.hidden = true;
     });
+
+    bindWarningInputs();
+    updateAnalysisWarning();
 
     // Controls panel toggle
     initControlsToggle();
@@ -196,6 +213,7 @@
     coordsEl.hidden = false;
     instructionEl.hidden = true;
     analyzeBtnEl.disabled = false;
+    updateAnalysisWarning();
   }
 
   // ===== Analysis =====
@@ -203,7 +221,7 @@
     if (radioState.lat === null || radioState.running) return;
 
     var antennaHeight = clampNumber(antennaInput.value, 0, 500, 10);
-    var radiusKm = clampNumber(radiusInput.value, 5, 1000, 30);
+    var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
     var freqMHz = parseFloat(frequencySelect.value);
     var unfiltered = !!(unfilteredCheck && unfilteredCheck.checked);
@@ -221,19 +239,17 @@
     radiusInput.value = radiusKm;
     txPowerInput.value = txPowerW;
 
-    // Memory guardrail: abort if full-circle mask would exceed MAX_MASK_MB
-    // and radar sweep is not enabled to break the work into wedges
-    if (!radarSweep) {
-      var mppGuard = metersPerPixel(radioState.lat, analysisZoom);
-      var pixelRadius = (radiusKm * 1000) / mppGuard;
-      var diameter = pixelRadius * 2;
-      var requiredMB = (diameter * diameter) / (1024 * 1024);
-      if (requiredMB > MAX_MASK_MB) {
-        statsEl.innerHTML = t('radioMemoryGuardrail', { mb: Math.round(requiredMB) });
-        statsPanelEl.hidden = false;
-        return;
-      }
-    }
+    var memoryEstimate = estimateAnalysisMemoryMB(
+      radioState.lat,
+      analysisZoom,
+      radiusKm,
+      txPowerW,
+      freqMHz,
+      radarSweep
+    );
+    renderAnalysisWarning(memoryEstimate, radarSweep, resVal);
+
+    var analysisToken = beginAnalysisSession();
 
     radioState.running = true;
     radioState.analysisZoom = analysisZoom;
@@ -262,7 +278,7 @@
     radioState.worker.onmessage = function (e) {
       var msg = e.data;
       if (msg.type === 'needTiles') {
-        fetchAndSendTiles(msg.tiles, radioState.worker);
+        fetchAndSendTiles(msg.tiles, radioState.worker, analysisToken);
       } else if (msg.type === 'phase1Done') {
         handlePhase1Done(msg);
       } else if (msg.type === 'phase2Done') {
@@ -298,25 +314,77 @@
     });
   }
 
-  function fetchAndSendTiles(tiles, targetWorker) {
-    var promises = tiles.map(function (tc) {
-      return getTile(tc.z, tc.x, tc.y).then(function (data) {
-        return { z: tc.z, x: tc.x, y: tc.y, data: data };
-      }).catch(function () {
-        return { z: tc.z, x: tc.x, y: tc.y, data: new Float32Array(256 * 256) };
-      });
-    });
+  function fetchAndSendTiles(tiles, targetWorker, analysisToken) {
+    if (!isAnalysisSessionActive(analysisToken) || !targetWorker) return;
 
-    Promise.all(promises).then(function (results) {
-      if (!targetWorker) return;
+    var reservation = reserveAnalysisTiles(tiles);
+    if (!reservation.ok) {
+      handleError({ message: 'TILE_LIMIT', count: reservation.count });
+      return;
+    }
+
+    loadTerrainTiles(tiles, radioState._isRadarSweep ? SWEEP_TILE_FETCH_CONCURRENCY : 0).then(function (results) {
+      if (!isAnalysisSessionActive(analysisToken) || !targetWorker) return;
+
       var transfers = [];
       var tileData = results.map(function (r) {
         var copy = new Float32Array(r.data);
         transfers.push(copy.buffer);
         return { z: r.z, x: r.x, y: r.y, data: copy.buffer };
       });
-      targetWorker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
+
+      try {
+        targetWorker.postMessage({ type: 'tiles', tiles: tileData }, transfers);
+      } catch (err) {
+        if (isAnalysisSessionActive(analysisToken)) {
+          handleError({ message: 'TILE_FETCH_FAILED', detail: err.message || String(err) });
+        }
+        return;
+      }
+
       progressTextEl.textContent = t('radioFetchingTiles');
+    }).catch(function (err) {
+      if (!isAnalysisSessionActive(analysisToken)) return;
+      handleError({ message: 'TILE_FETCH_FAILED', detail: err.message || String(err) });
+    });
+  }
+
+  function loadTerrainTiles(tiles, concurrency) {
+    if (!concurrency || tiles.length <= concurrency) {
+      return Promise.all(tiles.map(loadTerrainTile));
+    }
+
+    var results = new Array(tiles.length);
+    var nextIndex = 0;
+    var active = 0;
+
+    return new Promise(function (resolve, reject) {
+      function pump() {
+        if (nextIndex >= tiles.length && active === 0) {
+          resolve(results);
+          return;
+        }
+
+        while (active < concurrency && nextIndex < tiles.length) {
+          (function (idx) {
+            active++;
+            loadTerrainTile(tiles[idx]).then(function (result) {
+              results[idx] = result;
+              active--;
+              pump();
+            }).catch(reject);
+          })(nextIndex);
+          nextIndex++;
+        }
+      }
+
+      pump();
+    });
+  }
+
+  function loadTerrainTile(tc) {
+    return getTile(tc.z, tc.x, tc.y).then(function (data) {
+      return { z: tc.z, x: tc.x, y: tc.y, data: data };
     });
   }
 
@@ -367,10 +435,10 @@
     });
 
     var layer = radioState.canvasLayer;
-    // Decode binary coverage: Float32Array with [lat, lng, band, ...] triples
+    // Decode binary coverage: Float32Array with [x, y, band, ...] triples.
     var data = new Float32Array(msg.cells);
     for (var i = 0; i < data.length; i += 3) {
-      layer.setCellByLatLng(data[i], data[i + 1], data[i + 2]);
+      layer.setCellByBitmapXY(Math.round(data[i]), Math.round(data[i + 1]), data[i + 2]);
     }
     layer.scheduleRefresh();
   }
@@ -381,6 +449,7 @@
     var maskW = msg.maskW;
     var maskH = msg.maskH;
     var txParams = msg.txParams;
+    var analysisToken = radioState.analysisToken;
 
     // Track sweep state
     if (msg.isRadarSweep) {
@@ -391,7 +460,7 @@
         radioState._sweepWedgesCompleted = 0;
         radioState._sweepAggStats = {
           evaluated: 0, strongCount: 0, usableCount: 0,
-          marginalCount: 0, maxReachM: 0, tilesUsed: 0
+          marginalCount: 0, maxReachM: 0
         };
         radioState._totalCells = 0;
       }
@@ -413,7 +482,7 @@
     // Determine slice count: split mask into horizontal row-bands
     var sliceCount = Math.min(4, maskH);
     if (sliceCount < 1) sliceCount = 1;
-    radioState._propWorkerCount = Math.min(PROP_WORKER_COUNT, sliceCount);
+    radioState._propWorkerCount = msg.isRadarSweep ? 1 : Math.min(PROP_WORKER_COUNT, sliceCount);
 
     // Terminate any lingering propagation workers
     terminatePropWorkers();
@@ -452,9 +521,13 @@
       strongCount: 0,
       usableCount: 0,
       marginalCount: 0,
-      maxReachM: 0,
-      tilesUsed: msg.tilesUsed
+      maxReachM: 0
     };
+
+    if (msg.isRadarSweep) {
+      startSweepSliceProcessing(slices, maskW, msg, txParams, analysisToken);
+      return;
+    }
 
     // Spawn workers
     radioState.propWorkers = [];
@@ -467,7 +540,7 @@
         return function (e) {
           var m = e.data;
           if (m.type === 'needTiles') {
-            fetchAndSendTiles(m.tiles, workerRef);
+            fetchAndSendTiles(m.tiles, workerRef, analysisToken);
           } else if (m.type === 'coverageBatch') {
             handleCoverageBatch(m);
           } else if (m.type === 'sliceDone') {
@@ -494,6 +567,8 @@
           rows: assignment.rows,
           maskOriginGlobalX: msg.maskOriginGlobalX,
           maskOriginGlobalY: msg.maskOriginGlobalY,
+          bitmapOffsetX: msg.bitmapOffsetX || 0,
+          bitmapOffsetY: msg.bitmapOffsetY || 0,
           sliceId: assignment.sliceId,
           txLat: txParams.txLat,
           txLng: txParams.txLng,
@@ -511,13 +586,71 @@
     }
   }
 
+  function startSweepSliceProcessing(slices, maskW, msg, txParams, analysisToken) {
+    var pw = new Worker('radio-propagation-worker.js');
+    var nextSliceIndex = 0;
+
+    radioState.propWorkers = [pw];
+
+    pw.onmessage = function (e) {
+      var m = e.data;
+      if (m.type === 'needTiles') {
+        fetchAndSendTiles(m.tiles, pw, analysisToken);
+      } else if (m.type === 'coverageBatch') {
+        handleCoverageBatch(m);
+      } else if (m.type === 'sliceDone') {
+        handleSliceDone(m);
+        if (radioState.running && radioState._isRadarSweep && radioState._propSlicesDone < radioState._propTotalSlices) {
+          postNextSweepSlice();
+        }
+      } else if (m.type === 'error') {
+        handleError(m);
+      }
+    };
+
+    pw.onerror = function (err) {
+      handleError({ message: err.message || 'Propagation worker error' });
+    };
+
+    postNextSweepSlice();
+
+    function postNextSweepSlice() {
+      if (nextSliceIndex >= slices.length) return;
+
+      var assignment = slices[nextSliceIndex++];
+      var sliceMaskCopy = new Uint8Array(assignment.mask);
+      pw.postMessage({
+        type: 'start',
+        mask: sliceMaskCopy.buffer,
+        maskW: maskW,
+        rowOffset: assignment.rowOffset,
+        rows: assignment.rows,
+        maskOriginGlobalX: msg.maskOriginGlobalX,
+        maskOriginGlobalY: msg.maskOriginGlobalY,
+        bitmapOffsetX: msg.bitmapOffsetX || 0,
+        bitmapOffsetY: msg.bitmapOffsetY || 0,
+        sliceId: assignment.sliceId,
+        txLat: txParams.txLat,
+        txLng: txParams.txLng,
+        txElevation: txParams.txElevation,
+        antennaHeight: txParams.antennaHeight,
+        freqMHz: txParams.freqMHz,
+        txPowerW: txParams.txPowerW,
+        zoom: txParams.zoom,
+        mpp: txParams.mpp,
+        unfiltered: radioState._unfiltered,
+        itmEngine: txParams.itmEngine,
+        adaptiveCulling: txParams.adaptiveCulling
+      }, [sliceMaskCopy.buffer]);
+    }
+  }
+
   function handleSliceDone(msg) {
     var agg = radioState._propAggStats;
     agg.evaluated += msg.stats.evaluated;
     agg.strongCount += msg.stats.strongCount;
     agg.usableCount += msg.stats.usableCount;
     agg.marginalCount += msg.stats.marginalCount;
-    agg.tilesUsed += msg.stats.tilesUsed;
     if (msg.stats.maxReachM > agg.maxReachM) agg.maxReachM = msg.stats.maxReachM;
     if (msg.itmBackend) agg.itmBackend = msg.itmBackend;
 
@@ -533,7 +666,6 @@
         sa.strongCount += agg.strongCount;
         sa.usableCount += agg.usableCount;
         sa.marginalCount += agg.marginalCount;
-        sa.tilesUsed += agg.tilesUsed;
         if (agg.maxReachM > sa.maxReachM) sa.maxReachM = agg.maxReachM;
         if (agg.itmBackend) sa.itmBackend = agg.itmBackend;
 
@@ -551,7 +683,7 @@
       } else {
         // Standard (non-sweep) completion
         handleDone({
-          tilesUsed: agg.tilesUsed,
+          tilesUsed: getAnalysisTileCount(),
           cellsEvaluated: agg.evaluated,
           strongCount: agg.strongCount,
           usableCount: agg.usableCount,
@@ -572,12 +704,14 @@
   }
 
   function handleDone(stats) {
+    stats = stats || {};
+
     // In sweep mode, the orchestrator's final 'done' message has zeroed stats;
     // use the accumulated sweep stats instead
     if (radioState._isRadarSweep && radioState._sweepAggStats) {
       var sa = radioState._sweepAggStats;
       stats = {
-        tilesUsed: sa.tilesUsed,
+        tilesUsed: getAnalysisTileCount(),
         cellsEvaluated: sa.evaluated,
         strongCount: sa.strongCount,
         usableCount: sa.usableCount,
@@ -587,6 +721,8 @@
         itmBackend: sa.itmBackend
       };
     }
+
+    stats.tilesUsed = getAnalysisTileCount();
 
     radioState.running = false;
     radioState._isRadarSweep = false;
@@ -606,6 +742,7 @@
 
     var maxReachKm = (stats.maxReachM / 1000).toFixed(1);
     var mppVal = metersPerPixel(radioState.lat, radioState.analysisZoom || ANALYSIS_ZOOM);
+    var zoomUsed = radioState.analysisZoom || ANALYSIS_ZOOM;
     var pixelAreaKm2 = (mppVal * mppVal) / 1e6;
     var strongAreaKm2 = (stats.strongCount * pixelAreaKm2).toFixed(1);
     var usableAreaKm2 = (stats.usableCount * pixelAreaKm2).toFixed(1);
@@ -617,6 +754,7 @@
       t('radioTilesUsed', { n: stats.tilesUsed }) + '<br>' +
       t('radioCellsEvaluated', { n: stats.cellsEvaluated }) + '<br>' +
       t('radioMaxReach', { km: maxReachKm }) + '<br>' +
+      t('radioZoomUsed', { z: zoomUsed, mpp: Math.round(mppVal) }) + '<br>' +
       t('radioWorkerCount', { n: workerCount }) + '<br>' +
       t('radioElapsed', { time: formatElapsed(elapsed) }) + '<br>' +
       '<span class="radio-stat-strong">&#9632;</span> ' + t('radioStrongArea', { km2: strongAreaKm2 }) + '<br>' +
@@ -646,7 +784,12 @@
     progressOverlayEl.hidden = true;
 
     if (msg.message === 'TILE_LIMIT') {
-      statsEl.innerHTML = t('radioTileLimitExceeded', { n: msg.count || MAX_TILES_LIMIT });
+      statsEl.innerHTML = t('radioTileLimitExceeded', {
+        n: msg.count || getAnalysisTileCount() || MAX_TILES_LIMIT
+      });
+    } else if (msg.message === 'TILE_FETCH_FAILED') {
+      if (msg.detail) console.error('Terrain tile fetch failed:', msg.detail);
+      statsEl.innerHTML = t('radioTileFetchFailed');
     } else if (msg.message === 'WASM_INIT_FAILED') {
       console.error('ITM WASM init failed:', msg.detail);
       statsEl.innerHTML = t('radioWasmRequired');
@@ -678,6 +821,8 @@
     }
     radioState.lat = null;
     radioState.lng = null;
+    radioState.analysisTileCount = 0;
+    radioState.analysisTileKeys = null;
 
     if (radioState.marker) {
       radioState.map.removeLayer(radioState.marker);
@@ -688,6 +833,11 @@
     coordsEl.hidden = true;
     instructionEl.hidden = false;
     analyzeBtnEl.disabled = true;
+    if (warningEl) {
+      warningEl.hidden = true;
+      warningEl.textContent = '';
+      warningEl.removeAttribute('data-level');
+    }
     clearBtnEl.hidden = true;
     progressOverlayEl.hidden = true;
     statsPanelEl.hidden = true;
@@ -920,6 +1070,210 @@
   function _latToMercY(lat) {
     var latRad = lat * Math.PI / 180;
     return Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+  }
+
+  function beginAnalysisSession() {
+    radioState.analysisToken += 1;
+    radioState.analysisTileCount = 0;
+    radioState.analysisTileKeys = Object.create(null);
+    return radioState.analysisToken;
+  }
+
+  function isAnalysisSessionActive(token) {
+    return radioState.running && token === radioState.analysisToken;
+  }
+
+  function getAnalysisTileCount() {
+    return radioState.analysisTileCount || 0;
+  }
+
+  function reserveAnalysisTiles(tiles) {
+    var keys = radioState.analysisTileKeys;
+    var pending = [];
+    var seen = Object.create(null);
+    var currentCount = getAnalysisTileCount();
+
+    if (!keys) {
+      keys = Object.create(null);
+      radioState.analysisTileKeys = keys;
+    }
+
+    for (var i = 0; i < tiles.length; i++) {
+      var key = tiles[i].z + '/' + tiles[i].x + '/' + tiles[i].y;
+      if (keys[key] || seen[key]) continue;
+      seen[key] = true;
+      pending.push(key);
+    }
+
+    if (currentCount + pending.length > MAX_TILES_LIMIT) {
+      return { ok: false, count: currentCount + pending.length };
+    }
+
+    for (var j = 0; j < pending.length; j++) {
+      keys[pending[j]] = true;
+    }
+    radioState.analysisTileCount = currentCount + pending.length;
+
+    return { ok: true, count: radioState.analysisTileCount };
+  }
+
+  function estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep) {
+    var radiusM = radiusKm * 1000;
+    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz));
+    var mpp = metersPerPixel(lat, zoom);
+    var radiusPx = Math.ceil(effectiveRadiusM / mpp);
+    var bufferPx = Math.ceil((COVERAGE_BUFFER_KM * 1000) / mpp);
+    var sidePx = (radiusPx + bufferPx) * 2 + 1;
+    var totalBytes = sidePx * sidePx * BITMAP_BYTES_PER_PIXEL;
+    return totalBytes / (1024 * 1024);
+  }
+
+  function estimateAnalysisMemoryMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep) {
+    var bitmapMB = estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep);
+    var radiusM = radiusKm * 1000;
+    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz));
+    var mpp = metersPerPixel(lat, zoom);
+    var tileSpanM = mpp * 256;
+    var approxRadiusTiles = Math.ceil(effectiveRadiusM / Math.max(tileSpanM, 1));
+    var tileArea = Math.PI * approxRadiusTiles * approxRadiusTiles;
+    var tileMB = Math.min(tileArea, MAX_TILES_LIMIT) * TILE_BYTES_PER_TILE / (1024 * 1024);
+    var workerMB = PROP_WORKER_COUNT * PROP_WORKER_OVERHEAD_MB;
+    var totalMB = bitmapMB + tileMB + workerMB + BROWSER_OVERHEAD_MB;
+    var availableMemoryGB = getAvailableMemoryGB();
+    var availableMB = availableMemoryGB !== null ? availableMemoryGB * 1024 : null;
+    var risk = 'ok';
+
+    if (availableMB !== null) {
+      if (totalMB >= availableMB * MEMORY_RISK_RATIO_BLOCK) risk = 'block';
+      else if (totalMB >= availableMB * MEMORY_RISK_RATIO_WARN) risk = 'warn';
+    } else if (totalMB >= MAX_BITMAP_MB + BROWSER_OVERHEAD_MB) {
+      risk = 'warn';
+    }
+
+    return {
+      bitmapMB: bitmapMB,
+      tileMB: tileMB,
+      workerMB: workerMB,
+      totalMB: totalMB,
+      availableMemoryGB: availableMemoryGB,
+      risk: risk,
+      approxTiles: Math.min(Math.round(tileArea), MAX_TILES_LIMIT)
+    };
+  }
+
+  function getAvailableMemoryGB() {
+    if (typeof navigator !== 'undefined' && typeof navigator.deviceMemory === 'number') {
+      return navigator.deviceMemory;
+    }
+    if (typeof performance !== 'undefined' && performance.memory && performance.memory.jsHeapSizeLimit) {
+      return performance.memory.jsHeapSizeLimit / (1024 * 1024 * 1024);
+    }
+    return null;
+  }
+
+  function shouldWarnForLargeManualRun(memoryEstimate, radarSweep, resVal) {
+    if (memoryEstimate.risk !== 'ok') return true;
+    if (memoryEstimate.availableMemoryGB !== null) return false;
+    if (!radarSweep && memoryEstimate.bitmapMB > 200) return true;
+    if (resVal !== 'auto' && memoryEstimate.totalMB > 256) return true;
+    return false;
+  }
+
+  function bindWarningInputs() {
+    var update = function () { updateAnalysisWarning(); };
+    [antennaInput, radiusInput, txPowerInput].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('input', update);
+      el.addEventListener('change', update);
+    });
+    [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck, itmEngineSelect].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('change', update);
+    });
+  }
+
+  function updateAnalysisWarning() {
+    if (!warningEl) return;
+    if (radioState.lat === null) {
+      warningEl.hidden = true;
+      warningEl.textContent = '';
+      warningEl.removeAttribute('data-level');
+      return;
+    }
+
+    var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
+    var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var freqMHz = parseFloat(frequencySelect.value);
+    var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
+    var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
+    var analysisZoom = resVal === 'auto'
+      ? Math.min(12, Math.max(8, 12 - Math.floor(Math.log2(radiusKm / 30))))
+      : parseInt(resVal, 10);
+    var memoryEstimate = estimateAnalysisMemoryMB(
+      radioState.lat,
+      analysisZoom,
+      radiusKm,
+      txPowerW,
+      freqMHz,
+      radarSweep
+    );
+
+    renderAnalysisWarning(memoryEstimate, radarSweep, resVal);
+  }
+
+  function renderAnalysisWarning(memoryEstimate, radarSweep, resVal) {
+    if (!warningEl) return;
+
+    var shouldWarn = memoryEstimate.risk !== 'ok' || shouldWarnForLargeManualRun(memoryEstimate, radarSweep, resVal);
+    if (!shouldWarn) {
+      warningEl.hidden = true;
+      warningEl.textContent = '';
+      warningEl.removeAttribute('data-level');
+      return;
+    }
+
+    if (memoryEstimate.bitmapMB > MAX_BITMAP_MB || memoryEstimate.risk === 'block') {
+      warningEl.textContent = t('radioMemoryGuardrail', {
+        mb: Math.round(memoryEstimate.totalMB),
+        bitmapMb: Math.round(memoryEstimate.bitmapMB),
+        ramGb: memoryEstimate.availableMemoryGB !== null ? memoryEstimate.availableMemoryGB.toFixed(1) : '?'
+      });
+      warningEl.dataset.level = 'high';
+      warningEl.hidden = false;
+      return;
+    }
+
+    warningEl.textContent = buildMemoryWarningText(memoryEstimate, radarSweep, resVal);
+    warningEl.dataset.level = 'warn';
+    warningEl.hidden = false;
+  }
+
+  function buildMemoryWarningText(memoryEstimate, radarSweep, resVal) {
+    var lines = [
+      t('radioMemoryWarningSummary', {
+        totalMb: Math.round(memoryEstimate.totalMB),
+        bitmapMb: Math.round(memoryEstimate.bitmapMB),
+        tileMb: Math.round(memoryEstimate.tileMB)
+      })
+    ];
+
+    if (memoryEstimate.availableMemoryGB !== null) {
+      lines.push(t('radioMemoryWarningRam', { ramGb: memoryEstimate.availableMemoryGB.toFixed(1) }));
+    }
+    if (!radarSweep) {
+      lines.push(t('radioMemoryWarningSweep'));
+    }
+    if (resVal !== 'auto') {
+      lines.push(t('radioMemoryWarningManualZoom'));
+    }
+
+    return lines.join(' ');
+  }
+
+  function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
+    var marginDb = 10 * Math.log10(txPowerW) + 140;
+    var dKm = Math.pow(10, (marginDb - 32.45 - 20 * Math.log10(freqMHz)) / 20);
+    return dKm * 1000;
   }
 
   // ===== Utility =====

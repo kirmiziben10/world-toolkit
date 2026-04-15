@@ -16,6 +16,8 @@ var COVERAGE_BATCH_SIZE = 500;
 var RX_HEIGHT_M = 2;
 var RX_SENSITIVITY_DBW = -140;
 var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
+var ADAPTIVE_FILL_MARGIN_DB = 28;
+var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
 
 var metersPerPixel = self.TerrainTiles.metersPerPixel;
 var lngToTileX = self.TerrainTiles.lngToTileX;
@@ -37,6 +39,8 @@ var freqMHz = 144;
 var txPowerW = 5;
 var sliceId = 0;
 var adaptiveCulling = false;
+var bitmapOffsetX = 0;
+var bitmapOffsetY = 0;
 
 // ===== Message handler =====
 var startQueue = [];
@@ -143,6 +147,11 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 
 var MAX_PROFILE_SAMPLES = 2048;
 
+function freeSpacePathLossDb(distM, freqMHz) {
+  var safeDistKm = Math.max(distM, 1) / 1000;
+  return 32.45 + 20 * Math.log10(freqMHz) + 20 * Math.log10(safeDistKm);
+}
+
 function buildProfile(lat1, lng1, lat2, lng2) {
   var distM = haversineDistance(lat1, lng1, lat2, lng2);
   if (distM < mpp) return null;
@@ -181,6 +190,18 @@ function globalPixelXToLng(gpx) {
   return (gpx / (n * TILE_SIZE)) * 360 - 180;
 }
 
+function latToGlobalPixelY(lat) {
+  var latRad = lat * Math.PI / 180;
+  var n = Math.pow(2, zoom);
+  var yFrac = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+  return yFrac * TILE_SIZE;
+}
+
+function lngToGlobalPixelX(lng) {
+  var n = Math.pow(2, zoom);
+  return ((lng + 180) / 360) * n * TILE_SIZE;
+}
+
 function collectChunkTiles(cells, startIdx, endIdx) {
   // Find bbox of chunk cells for direct chunk-tile inclusion
   var minLat = Infinity, maxLat = -Infinity;
@@ -207,15 +228,20 @@ function collectChunkTiles(cells, startIdx, endIdx) {
 
   // Collect tiles along a ray from TX to a target point using Bresenham-style stepping
   function traceRayTiles(toLat, toLng) {
-    var distM = haversineDistance(txLat, txLng, toLat, toLng);
-    var tileSpanM = mpp * 256;
-    var stepM = tileSpanM * 0.5;
-    var nSteps = Math.max(2, Math.ceil(distM / stepM));
+    var startGX = lngToGlobalPixelX(txLng);
+    var startGY = latToGlobalPixelY(txLat);
+    var endGX = lngToGlobalPixelX(toLng);
+    var endGY = latToGlobalPixelY(toLat);
+    var deltaGX = endGX - startGX;
+    var deltaGY = endGY - startGY;
+    var stepPx = TILE_SIZE * 0.5;
+    var nSteps = Math.max(2, Math.ceil(Math.max(Math.abs(deltaGX), Math.abs(deltaGY)) / stepPx));
+
     for (var i = 0; i <= nSteps; i++) {
       var frac = i / nSteps;
-      var lat = txLat + (toLat - txLat) * frac;
-      var lng = txLng + (toLng - txLng) * frac;
-      addTile(zoom, lngToTileX(lng, zoom), latToTileY(lat, zoom));
+      var gpx = startGX + deltaGX * frac;
+      var gpy = startGY + deltaGY * frac;
+      addTile(zoom, Math.floor(gpx / TILE_SIZE), Math.floor(gpy / TILE_SIZE));
     }
   }
 
@@ -348,6 +374,8 @@ function handleStartInner(msg) {
   adaptiveCulling = msg.adaptiveCulling || false;
   maskOriginGlobalX = msg.maskOriginGlobalX;
   maskOriginGlobalY = msg.maskOriginGlobalY;
+  bitmapOffsetX = msg.bitmapOffsetX || 0;
+  bitmapOffsetY = msg.bitmapOffsetY || 0;
 
   // Decode binary mask slice into cell list
   var mask = new Uint8Array(msg.mask);
@@ -360,10 +388,10 @@ function handleStartInner(msg) {
     for (var px = 0; px < maskW; px++) {
       if (!mask[ry * maskW + px]) continue;
       cells.push({
-        cellX: px,
-        cellY: globalCellY,
-        lat: globalPixelYToLat(maskOriginGlobalY + globalCellY),
-        lng: globalPixelXToLng(maskOriginGlobalX + px)
+        cellX: px + bitmapOffsetX,
+        cellY: globalCellY + bitmapOffsetY,
+        lat: globalPixelYToLat(maskOriginGlobalY + globalCellY + 0.5),
+        lng: globalPixelXToLng(maskOriginGlobalX + px + 0.5)
       });
     }
   }
@@ -388,7 +416,7 @@ function processSlice(cells, totalCells) {
   var rxGainDbi = 0;
 
   var evaluated = 0;
-  // Binary batch buffer: Float32Array triples [lat, lng, band, ...]
+  // Binary batch buffer: Float32Array triples [fullBitmapX, fullBitmapY, band, ...]
   var batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
   var batchCount = 0;
   var strongCount = 0, usableCount = 0, marginalCount = 0;
@@ -417,8 +445,8 @@ function processSlice(cells, totalCells) {
     else marginalCount++;
 
     var bi = batchCount * 3;
-    batchBuf[bi]     = cell.lat;
-    batchBuf[bi + 1] = cell.lng;
+    batchBuf[bi]     = cell.cellX;
+    batchBuf[bi + 1] = cell.cellY;
     batchBuf[bi + 2] = band;
     batchCount++;
 
@@ -428,6 +456,11 @@ function processSlice(cells, totalCells) {
   }
 
   function evaluateCell(cell) {
+    var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    if (distM < mpp) {
+      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - RX_SENSITIVITY_DBW;
+    }
+
     var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
     if (!result) return -Infinity;
 
@@ -452,7 +485,26 @@ function processSlice(cells, totalCells) {
     if (!chunkMap[ck]) chunkMap[ck] = [];
     chunkMap[ck].push(c);
   }
-  var chunkKeys = Object.keys(chunkMap);
+  var chunkKeys = Object.keys(chunkMap).map(function (key) {
+    var chunk = chunkMap[key];
+    var sumLat = 0;
+    var sumLng = 0;
+    for (var ci = 0; ci < chunk.length; ci++) {
+      sumLat += chunk[ci].lat;
+      sumLng += chunk[ci].lng;
+    }
+    var centerLat = sumLat / chunk.length;
+    var centerLng = sumLng / chunk.length;
+    var angle = Math.atan2(centerLat - txLat, centerLng - txLng);
+    return {
+      key: key,
+      dist: haversineDistance(txLat, txLng, centerLat, centerLng),
+      angle: angle
+    };
+  }).sort(function (a, b) {
+    if (a.dist !== b.dist) return a.dist - b.dist;
+    return a.angle - b.angle;
+  });
   var chunkIndex = 0;
 
   function processNextChunk() {
@@ -477,7 +529,7 @@ function processSlice(cells, totalCells) {
       return;
     }
 
-    var chunk = chunkMap[chunkKeys[chunkIndex]];
+    var chunk = chunkMap[chunkKeys[chunkIndex].key];
     chunkIndex++;
 
     // Collect tiles needed for this chunk
@@ -527,52 +579,123 @@ function processSlice(cells, totalCells) {
     for (var bi = 0; bi < blockKeys.length; bi++) {
       var block = blockMap[blockKeys[bi]];
 
-      // Pass 1: Pick highest-elevation cell as scout
-      var scoutCell = block[0];
-      var maxElev = -Infinity;
-      for (var j = 0; j < block.length; j++) {
-        var elev = getElevation(block[j].lat, block[j].lng);
-        if (elev !== null && elev > maxElev) {
-          maxElev = elev;
-          scoutCell = block[j];
-        }
-      }
+      var scoutPlan = buildAdaptiveScoutPlan(block);
+      var scoutMargins = [];
+      var scoutBands = [];
+      var allDead = true;
+      var fillBand = -1;
 
-      evaluated++; // count scout evaluation
-      var scoutMargin = evaluateCell(scoutCell);
+      for (var si = 0; si < scoutPlan.scouts.length; si++) {
+        var scoutCell = scoutPlan.scouts[si];
+        evaluated++;
 
-      if (scoutMargin < 0) {
-        // Dead block: count all remaining cells as evaluated, skip processing
-        evaluated += block.length - 1;
-        continue;
-      }
+        var scoutMargin = evaluateCell(scoutCell);
+        scoutMargins.push(scoutMargin);
 
-      // Pass 2: Fine-fill alive block — evaluate every cell
-      // The scout cell was already evaluated; emit it if it has signal
-      if (scoutMargin !== -Infinity) {
-        var scoutBand;
-        if (scoutMargin > 20)      scoutBand = 0;
-        else if (scoutMargin >= 5) scoutBand = 1;
-        else                       scoutBand = 2;
+        if (scoutMargin === -Infinity || scoutMargin < 0) continue;
+
+        allDead = false;
+        var scoutBand = marginToBand(scoutMargin);
+        scoutBands.push(scoutBand);
         emitCell(scoutCell, scoutBand);
       }
 
+      if (allDead) {
+        evaluated += block.length - scoutPlan.scouts.length;
+        continue;
+      }
+
+      if (
+        scoutBands.length === scoutPlan.scouts.length &&
+        scoutPlan.elevSpan <= ADAPTIVE_FILL_ELEV_SPAN_M &&
+        minArrayValue(scoutMargins) >= ADAPTIVE_FILL_MARGIN_DB
+      ) {
+        fillBand = scoutBands[0];
+      }
+
       for (var j = 0; j < block.length; j++) {
-        if (block[j] === scoutCell) continue; // already evaluated
+        var blockCell = block[j];
+        if (blockCell._adaptiveScout) continue;
+
+        if (fillBand !== -1) {
+          evaluated++;
+          emitCell(blockCell, fillBand);
+          continue;
+        }
+
         evaluated++;
 
-        var margin = evaluateCell(block[j]);
-        if (margin === -Infinity) continue;
+        var margin = evaluateCell(blockCell);
+        if (margin === -Infinity || margin < 0) continue;
+        emitCell(blockCell, marginToBand(margin));
+      }
 
-        var band;
-        if (margin > 20)      band = 0;
-        else if (margin >= 5) band = 1;
-        else if (margin >= 0) band = 2;
-        else continue;
-
-        emitCell(block[j], band);
+      for (var ck = 0; ck < scoutPlan.scouts.length; ck++) {
+        scoutPlan.scouts[ck]._adaptiveScout = false;
       }
     }
+  }
+
+  function buildAdaptiveScoutPlan(block) {
+    var highestCell = block[0];
+    var closestCell = block[0];
+    var centerCell = block[Math.floor(block.length / 2)];
+    var maxElev = -Infinity;
+    var minElev = Infinity;
+    var minDist = Infinity;
+
+    for (var i = 0; i < block.length; i++) {
+      var cell = block[i];
+      if (cell.elev === undefined) cell.elev = getElevation(cell.lat, cell.lng);
+      var elev = cell.elev;
+      if (elev !== null) {
+        if (elev > maxElev) {
+          maxElev = elev;
+          highestCell = cell;
+        }
+        if (elev < minElev) minElev = elev;
+      }
+
+      if (cell.distM === undefined) cell.distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+      if (cell.distM < minDist) {
+        minDist = cell.distM;
+        closestCell = cell;
+      }
+    }
+
+    var scouts = [];
+    var scoutSeen = new Set();
+    addAdaptiveScout(scouts, scoutSeen, closestCell);
+    addAdaptiveScout(scouts, scoutSeen, centerCell);
+    addAdaptiveScout(scouts, scoutSeen, highestCell);
+
+    return {
+      scouts: scouts,
+      elevSpan: (maxElev === -Infinity || minElev === Infinity) ? Infinity : maxElev - minElev
+    };
+  }
+
+  function addAdaptiveScout(list, seen, cell) {
+    if (!cell) return;
+    var key = cell.cellX + ',' + cell.cellY;
+    if (seen.has(key)) return;
+    seen.add(key);
+    cell._adaptiveScout = true;
+    list.push(cell);
+  }
+
+  function marginToBand(margin) {
+    if (margin > 20) return 0;
+    if (margin >= 5) return 1;
+    return 2;
+  }
+
+  function minArrayValue(values) {
+    var min = Infinity;
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] < min) min = values[i];
+    }
+    return min;
   }
 
   processNextChunk();

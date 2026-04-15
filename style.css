@@ -1733,6 +1733,23 @@ a.action-btn {
   min-width: 20px;
 }
 
+.radio-warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(213, 180, 86, 0.55);
+  background: rgba(255, 242, 204, 0.72);
+  color: #6c4b00;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.radio-warning[hidden] { display: none; }
+.radio-warning[data-level="high"] {
+  border-color: rgba(196, 78, 43, 0.55);
+  background: rgba(255, 230, 224, 0.8);
+  color: #8a2f1e;
+}
+
 /* Radio stats panel (mirrors #results-panel) */
 #radio-stats-panel {
   position: absolute;

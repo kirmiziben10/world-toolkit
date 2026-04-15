@@ -76,13 +76,50 @@ function bearingToCompass(deg) {
 }
 
 // ===== Window Layout Persistence =====
-function saveWindowLayout(winId) {
-  if (IS_MOBILE) return;
-  const win = document.getElementById(winId);
+function captureWindowLayout(win) {
+  if (!win) return null;
   const rect = win.getBoundingClientRect();
-  localStorage.setItem('sv_layout_' + winId, JSON.stringify({
-    top: rect.top, left: rect.left, width: rect.width, height: rect.height,
-  }));
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function applyWindowLayout(win, layout) {
+  if (!win || !layout) return;
+  win.style.top = layout.top + 'px';
+  win.style.left = layout.left + 'px';
+  win.style.width = layout.width + 'px';
+  win.style.height = layout.height + 'px';
+}
+
+function isWindowMaximized(winId) {
+  return !IS_MOBILE && localStorage.getItem('sv_win_maximized_' + winId) === 'true';
+}
+
+function setWindowMaximizedState(winId, maximized) {
+  if (IS_MOBILE) return;
+  localStorage.setItem('sv_win_maximized_' + winId, maximized ? 'true' : 'false');
+}
+
+function applyMaximizedWindowLayout(winId) {
+  const win = document.getElementById(winId);
+  if (!win) return;
+  win.style.top = '0px';
+  win.style.left = '0px';
+  win.style.width = window.innerWidth + 'px';
+  win.style.height = window.innerHeight + 'px';
+}
+
+function saveWindowLayout(winId, layout) {
+  if (IS_MOBILE) return;
+  if (!layout && isWindowMaximized(winId)) return;
+  const win = document.getElementById(winId);
+  const nextLayout = layout || captureWindowLayout(win);
+  if (!nextLayout) return;
+  localStorage.setItem('sv_layout_' + winId, JSON.stringify(nextLayout));
 }
 
 function loadWindowLayout(winId) {
@@ -100,10 +137,16 @@ function restoreWindowLayout(winId) {
   const l = loadWindowLayout(winId);
   if (!l) return;
   const win = document.getElementById(winId);
-  win.style.top    = l.top    + 'px';
-  win.style.left   = l.left   + 'px';
-  win.style.width  = l.width  + 'px';
-  win.style.height = l.height + 'px';
+  applyWindowLayout(win, l);
+}
+
+function restoreWindowState(winId) {
+  if (IS_MOBILE) return;
+  if (isWindowMaximized(winId)) {
+    applyMaximizedWindowLayout(winId);
+    return;
+  }
+  restoreWindowLayout(winId);
 }
 
 // ===== Initialize =====
@@ -118,7 +161,7 @@ function init() {
   undoBtnEl = document.getElementById('undo-btn');
   redoBtnEl = document.getElementById('redo-btn');
   if (!IS_MOBILE) {
-    restoreWindowLayout('main-window');
+    ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(restoreWindowState);
   }
   initMap();
   initDrawControls();
@@ -713,17 +756,18 @@ function initButtons() {
     const win = document.getElementById('radio-window');
     if (win.hidden) {
       if (!IS_MOBILE) {
-        const saved = loadWindowLayout('radio-window');
-        if (saved) {
-          win.style.top    = saved.top    + 'px';
-          win.style.left   = saved.left   + 'px';
-          win.style.width  = saved.width  + 'px';
-          win.style.height = saved.height + 'px';
+        if (isWindowMaximized('radio-window')) {
+          applyMaximizedWindowLayout('radio-window');
         } else {
-          win.style.top = '106px';
-          win.style.left = '124px';
-          win.style.width = 'calc(100vw - 248px)';
-          win.style.height = 'calc(100vh - 132px)';
+          const saved = loadWindowLayout('radio-window');
+          if (saved) {
+            applyWindowLayout(win, saved);
+          } else {
+            win.style.top = '106px';
+            win.style.left = '124px';
+            win.style.width = 'calc(100vw - 248px)';
+            win.style.height = 'calc(100vh - 132px)';
+          }
         }
       }
       win.hidden = false;
@@ -780,18 +824,19 @@ function openSavedPanel(type) {
   // Only animate open if truly hidden; otherwise just focus
   if (win.hidden) {
     if (!IS_MOBILE) {
-      const saved = loadWindowLayout(winId);
-      if (saved) {
-        win.style.top    = saved.top    + 'px';
-        win.style.left   = saved.left   + 'px';
-        win.style.width  = saved.width  + 'px';
-        win.style.height = saved.height + 'px';
+      if (isWindowMaximized(winId)) {
+        applyMaximizedWindowLayout(winId);
       } else {
-        const offset = type === 'loved' ? 0 : 344;
-        win.style.top = '120px';
-        win.style.left = `calc(50% - 160px + ${offset}px)`;
-        win.style.width = '320px';
-        win.style.height = '460px';
+        const saved = loadWindowLayout(winId);
+        if (saved) {
+          applyWindowLayout(win, saved);
+        } else {
+          const offset = type === 'loved' ? 0 : 344;
+          win.style.top = '120px';
+          win.style.left = `calc(50% - 160px + ${offset}px)`;
+          win.style.width = '320px';
+          win.style.height = '460px';
+        }
       }
     }
     win.hidden = false;
@@ -991,30 +1036,48 @@ function renderSavedPanel(type) {
 const MAXIMIZE_SVG = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/></svg>`;
 const RESTORE_SVG  = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="3" width="11" height="11" rx="1.5" stroke="white" stroke-width="1.5"/><rect x="3" y="6" width="11" height="11" rx="1.5" stroke="white" stroke-width="1.5" fill="rgba(255,255,255,0.15)"/></svg>`;
 
+function syncMaximizeButton(winId, btn) {
+  if (!btn) return;
+  if (isWindowMaximized(winId)) {
+    btn.innerHTML = RESTORE_SVG;
+    btn.title = t('restore');
+  } else {
+    btn.innerHTML = MAXIMIZE_SVG;
+    btn.title = t('maximize');
+  }
+}
+
+function syncAllMaximizeButtons() {
+  if (IS_MOBILE) return;
+  syncMaximizeButton('main-window', document.getElementById('btn-maximize-main'));
+  syncMaximizeButton('loved-window', document.getElementById('btn-maximize-loved'));
+  syncMaximizeButton('starred-window', document.getElementById('btn-maximize-starred'));
+  syncMaximizeButton('radio-window', document.getElementById('btn-maximize-radio'));
+}
+
 function initMaximize(winId, btnId) {
   const win = document.getElementById(winId);
   const btn = document.getElementById(btnId);
-  let savedLayout = null;
+  let savedLayout = isWindowMaximized(winId) ? loadWindowLayout(winId) : null;
+
+  syncMaximizeButton(winId, btn);
 
   btn.addEventListener('click', () => {
-    if (savedLayout) {
-      win.style.top    = savedLayout.top    + 'px';
-      win.style.left   = savedLayout.left   + 'px';
-      win.style.width  = savedLayout.width  + 'px';
-      win.style.height = savedLayout.height + 'px';
+    if (isWindowMaximized(winId)) {
+      const layout = savedLayout || loadWindowLayout(winId);
+      setWindowMaximizedState(winId, false);
+      if (layout) {
+        applyWindowLayout(win, layout);
+        saveWindowLayout(winId, layout);
+      }
       savedLayout = null;
-      btn.innerHTML = MAXIMIZE_SVG;
-      btn.title = t('maximize');
     } else {
-      const rect = win.getBoundingClientRect();
-      savedLayout = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
-      win.style.top    = '0px';
-      win.style.left   = '0px';
-      win.style.width  = window.innerWidth  + 'px';
-      win.style.height = window.innerHeight + 'px';
-      btn.innerHTML = RESTORE_SVG;
-      btn.title = t('restore');
+      savedLayout = captureWindowLayout(win);
+      if (savedLayout) saveWindowLayout(winId, savedLayout);
+      setWindowMaximizedState(winId, true);
+      applyMaximizedWindowLayout(winId);
     }
+    syncMaximizeButton(winId, btn);
     win.classList.add('win-maximizing');
     let rafId;
     function tickResize() {
@@ -1042,6 +1105,7 @@ function initWindowDrag() {
   let offsetY = 0;
 
   titlebar.addEventListener('mousedown', (e) => {
+    if (isWindowMaximized('main-window')) return;
     if (e.target.closest('.titlebar-trailing')) return;
     
     isDragging = true;
@@ -1091,6 +1155,7 @@ function initWindowResize() {
 
   handles.forEach(handle => {
     handle.addEventListener('mousedown', (e) => {
+      if (isWindowMaximized('main-window')) return;
       isResizing = true;
       currentHandle = handle;
       
@@ -1168,6 +1233,7 @@ function initXpWindow(winId, titlebarId) {
   let dragOffX = 0, dragOffY = 0;
 
   titlebar.addEventListener('mousedown', (e) => {
+    if (isWindowMaximized(winId)) return;
     if (e.target.closest('.titlebar-trailing')) return;
     isDragging = true;
     const rect = win.getBoundingClientRect();
@@ -1198,6 +1264,7 @@ function initXpWindow(winId, titlebarId) {
 
   handles.forEach(handle => {
     handle.addEventListener('mousedown', (e) => {
+      if (isWindowMaximized(winId)) return;
       isResizing = true;
       currentHandle = handle;
       const rect = win.getBoundingClientRect();
@@ -1819,6 +1886,7 @@ function handleLanguageChange() {
   localizeDrawLocal();
   rebuildLayerControl();
   updateGlobeAttribution();
+  syncAllMaximizeButtons();
   validateSelection(state.selectionBounds);
 
   if (!document.getElementById('loved-window').hidden) {

@@ -49,6 +49,8 @@ var sweepWedgeIndex = 0;
 var sweepTotalWedges = 0;
 var sweepTxTileKey = null;  // key of TX tile to preserve across evictions
 var sweepTxTileData = null; // Float32Array of TX tile
+var sweepBitmapOriginGlobalX = 0;
+var sweepBitmapOriginGlobalY = 0;
 
 // Pending tile resolution
 var pendingTileResolve = null;
@@ -220,6 +222,8 @@ function handleStart(msg) {
   tileStore.clear();
   tilesUsed = 0;
   sweepState = 'IDLE';
+  sweepBitmapOriginGlobalX = 0;
+  sweepBitmapOriginGlobalY = 0;
 
   var txTile = getTileCoord(txLat, txLng);
   requestTilesAndRun([txTile], function () {
@@ -526,6 +530,8 @@ function runPhase3(mask, mw, mh, totalCells) {
     maskH: mh,
     maskOriginGlobalX: maskOriginGlobalX,
     maskOriginGlobalY: maskOriginGlobalY,
+    bitmapOffsetX: 0,
+    bitmapOffsetY: 0,
     totalCells: totalCells,
     txParams: {
       txLat: txLat,
@@ -559,6 +565,9 @@ function startSweep() {
   var fullMinGY = Math.floor(txGY) - radiusPx - bufferPx;
   var fullW = (radiusPx + bufferPx) * 2 + 1;
   var fullH = (radiusPx + bufferPx) * 2 + 1;
+
+  sweepBitmapOriginGlobalX = fullMinGX;
+  sweepBitmapOriginGlobalY = fullMinGY;
 
   self.postMessage({
     type: 'coverageBounds',
@@ -617,6 +626,8 @@ function sendWedgePartition(mask, mw, mh, totalCells) {
     maskH: mh,
     maskOriginGlobalX: maskOriginGlobalX,
     maskOriginGlobalY: maskOriginGlobalY,
+    bitmapOffsetX: maskOriginGlobalX - sweepBitmapOriginGlobalX,
+    bitmapOffsetY: maskOriginGlobalY - sweepBitmapOriginGlobalY,
     totalCells: totalCells,
     wedgeIndex: sweepWedgeIndex,
     totalWedges: sweepTotalWedges,
