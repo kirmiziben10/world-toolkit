@@ -42,6 +42,10 @@ var unfilteredMode = false;
 var itmEngine = 'wasm';
 var radarSweep = false;
 var adaptiveCulling = false;
+var fastFillEnabled = true;
+var sectorEnabled = false;
+var sectorBearingDeg = 0;
+var sectorAngleDeg = 360;
 
 // Sweep state machine: IDLE | WEDGE_RUNNING | WAITING_FOR_MAIN
 var sweepState = 'IDLE';
@@ -204,6 +208,64 @@ function globalPixelXToLng(gpx) {
   return (gpx / (n * TILE_SIZE)) * 360 - 180;
 }
 
+function normalizeBearingDeg(deg) {
+  deg = deg % 360;
+  return deg < 0 ? deg + 360 : deg;
+}
+
+function angularDistanceDeg(a, b) {
+  var diff = Math.abs(normalizeBearingDeg(a) - normalizeBearingDeg(b));
+  return diff > 180 ? 360 - diff : diff;
+}
+
+function isInDirectionalSector(bearing) {
+  if (!sectorEnabled || sectorAngleDeg >= 360) return true;
+  return angularDistanceDeg(bearing, sectorBearingDeg) <= sectorAngleDeg / 2;
+}
+
+function computeAnalysisBounds(effectiveRadiusM, bufferPx) {
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+
+  if (!sectorEnabled || sectorAngleDeg >= 360) {
+    var radiusPx = Math.ceil(effectiveRadiusM / mpp);
+    return {
+      minGX: Math.floor(txGX) - radiusPx - bufferPx,
+      maxGX: Math.ceil(txGX) + radiusPx + bufferPx,
+      minGY: Math.floor(txGY) - radiusPx - bufferPx,
+      maxGY: Math.ceil(txGY) + radiusPx + bufferPx
+    };
+  }
+
+  var halfAngle = sectorAngleDeg / 2;
+  var sampleCount = Math.max(12, Math.ceil(sectorAngleDeg / 2));
+  var allGX = [txGX];
+  var allGY = [txGY];
+
+  for (var i = 0; i <= sampleCount; i++) {
+    var sampleBearing = normalizeBearingDeg(sectorBearingDeg - halfAngle + (sectorAngleDeg * i / sampleCount));
+    var samplePoint = destinationPoint(txLat, txLng, sampleBearing, effectiveRadiusM);
+    allGX.push(lngToGlobalPixelX(samplePoint.lng));
+    allGY.push(latToGlobalPixelY(samplePoint.lat));
+  }
+
+  var minGX = Infinity, maxGX = -Infinity;
+  var minGY = Infinity, maxGY = -Infinity;
+  for (var j = 0; j < allGX.length; j++) {
+    if (allGX[j] < minGX) minGX = allGX[j];
+    if (allGX[j] > maxGX) maxGX = allGX[j];
+    if (allGY[j] < minGY) minGY = allGY[j];
+    if (allGY[j] > maxGY) maxGY = allGY[j];
+  }
+
+  return {
+    minGX: Math.floor(minGX) - bufferPx,
+    maxGX: Math.ceil(maxGX) + bufferPx,
+    minGY: Math.floor(minGY) - bufferPx,
+    maxGY: Math.ceil(maxGY) + bufferPx
+  };
+}
+
 // ===== Entry point =====
 
 function handleStart(msg) {
@@ -219,6 +281,10 @@ function handleStart(msg) {
   itmEngine = msg.itmEngine || 'wasm';
   radarSweep = msg.radarSweep || false;
   adaptiveCulling = msg.adaptiveCulling || false;
+  fastFillEnabled = msg.fastFillEnabled !== false;
+  sectorEnabled = !!msg.sectorEnabled;
+  sectorBearingDeg = normalizeBearingDeg(msg.sectorBearingDeg || 0);
+  sectorAngleDeg = Math.max(1, Math.min(360, msg.sectorAngleDeg || 360));
   tileStore.clear();
   tilesUsed = 0;
   sweepState = 'IDLE';
@@ -358,25 +424,23 @@ function runPhase2Unfiltered(callback) {
   var clampRadiusM = Math.min(radiusM, fsMaxM);
   var wasClamped = fsMaxM < radiusM;
 
-  var txGX = lngToGlobalPixelX(txLng);
-  var txGY = latToGlobalPixelY(txLat);
-  var radiusPx = Math.ceil(clampRadiusM / mpp);
   var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+  var bounds = computeAnalysisBounds(clampRadiusM, bufferPx);
 
-  maskOriginGlobalX = Math.floor(txGX) - radiusPx - bufferPx;
-  maskOriginGlobalY = Math.floor(txGY) - radiusPx - bufferPx;
-  maskW = (radiusPx + bufferPx) * 2 + 1;
-  maskH = (radiusPx + bufferPx) * 2 + 1;
+  maskOriginGlobalX = bounds.minGX;
+  maskOriginGlobalY = bounds.minGY;
+  maskW = bounds.maxGX - bounds.minGX + 1;
+  maskH = bounds.maxGY - bounds.minGY + 1;
 
   var mask = new Uint8Array(maskW * maskH);
   var totalCells = 0;
 
   for (var py = 0; py < maskH; py++) {
     for (var px = 0; px < maskW; px++) {
-      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
-      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py + 0.5);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px + 0.5);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
-      if (dist <= clampRadiusM) {
+      if (dist <= clampRadiusM && isInDirectionalSector(bearingFromTx(cellLat, cellLng))) {
         mask[py * maskW + px] = 1;
         totalCells++;
       }
@@ -424,6 +488,14 @@ function runPhase2(points, callback) {
   minGY = Math.floor(minGY) - bufferPx;
   maxGY = Math.ceil(maxGY) + bufferPx;
 
+  if (sectorEnabled && sectorAngleDeg < 360) {
+    var sectorBounds = computeAnalysisBounds(clampRadiusM, bufferPx);
+    minGX = Math.max(minGX, sectorBounds.minGX);
+    maxGX = Math.min(maxGX, sectorBounds.maxGX);
+    minGY = Math.max(minGY, sectorBounds.minGY);
+    maxGY = Math.min(maxGY, sectorBounds.maxGY);
+  }
+
   // 2b. Shrink bbox to clamp circle if free-space max is smaller than user radius
   if (wasClamped) {
     var txGX = lngToGlobalPixelX(txLng);
@@ -460,10 +532,12 @@ function runPhase2(points, callback) {
   for (var py = 0; py < maskH; py++) {
     for (var px = 0; px < maskW; px++) {
       if (!mask[py * maskW + px]) continue;
-      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
-      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py + 0.5);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px + 0.5);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
       if (dist > clampRadiusM) {
+        mask[py * maskW + px] = 0;
+      } else if (!isInDirectionalSector(bearingFromTx(cellLat, cellLng))) {
         mask[py * maskW + px] = 0;
       } else {
         totalCells++;
@@ -544,7 +618,8 @@ function runPhase3(mask, mw, mh, totalCells) {
       mpp: mpp,
       unfiltered: unfilteredMode,
       itmEngine: itmEngine,
-      adaptiveCulling: adaptiveCulling
+      adaptiveCulling: adaptiveCulling,
+      fastFillEnabled: fastFillEnabled
     },
     tilesUsed: tilesUsed
   }, [maskCopy.buffer]);
@@ -557,14 +632,12 @@ function startSweep() {
   sweepWedgeIndex = 0;
 
   // Send full-circle coverage bounds once so the main thread can init the canvas
-  var radiusPx = Math.ceil(radiusM / mpp);
   var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
-  var txGX = lngToGlobalPixelX(txLng);
-  var txGY = latToGlobalPixelY(txLat);
-  var fullMinGX = Math.floor(txGX) - radiusPx - bufferPx;
-  var fullMinGY = Math.floor(txGY) - radiusPx - bufferPx;
-  var fullW = (radiusPx + bufferPx) * 2 + 1;
-  var fullH = (radiusPx + bufferPx) * 2 + 1;
+  var sweepBounds = computeAnalysisBounds(radiusM, bufferPx);
+  var fullMinGX = sweepBounds.minGX;
+  var fullMinGY = sweepBounds.minGY;
+  var fullW = sweepBounds.maxGX - sweepBounds.minGX + 1;
+  var fullH = sweepBounds.maxGY - sweepBounds.minGY + 1;
 
   sweepBitmapOriginGlobalX = fullMinGX;
   sweepBitmapOriginGlobalY = fullMinGY;
@@ -643,7 +716,8 @@ function sendWedgePartition(mask, mw, mh, totalCells) {
       mpp: mpp,
       unfiltered: unfilteredMode,
       itmEngine: itmEngine,
-      adaptiveCulling: adaptiveCulling
+      adaptiveCulling: adaptiveCulling,
+      fastFillEnabled: fastFillEnabled
     },
     tilesUsed: tilesUsed
   }, [maskCopy.buffer]);
@@ -794,8 +868,8 @@ function buildWedgeMaskUnfiltered(startDeg, endDeg, callback) {
     var rowHasCell = false;
     var pastRadius = false;
     for (var px = 0; px < maskW; px++) {
-      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
-      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py + 0.5);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px + 0.5);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
 
       // Early-out: once past radius on this row (after we've seen in-radius cells), skip rest
@@ -807,6 +881,7 @@ function buildWedgeMaskUnfiltered(startDeg, endDeg, callback) {
       // Check bearing within wedge
       var bearing = bearingFromTx(cellLat, cellLng);
       if (!isInWedge(bearing, startDeg, endDeg)) continue;
+      if (!isInDirectionalSector(bearing)) continue;
 
       mask[py * maskW + px] = 1;
       totalCells++;
@@ -873,8 +948,8 @@ function buildWedgeMaskFromPoints(points, startDeg, endDeg, callback) {
   for (var py = 0; py < maskH; py++) {
     for (var px = 0; px < maskW; px++) {
       if (!mask[py * maskW + px]) continue;
-      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
-      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py + 0.5);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px + 0.5);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
       if (dist > clampRadiusM) {
         mask[py * maskW + px] = 0;
@@ -882,6 +957,10 @@ function buildWedgeMaskFromPoints(points, startDeg, endDeg, callback) {
       }
       var bearing = bearingFromTx(cellLat, cellLng);
       if (!isInWedge(bearing, startDeg, endDeg)) {
+        mask[py * maskW + px] = 0;
+        continue;
+      }
+      if (!isInDirectionalSector(bearing)) {
         mask[py * maskW + px] = 0;
         continue;
       }

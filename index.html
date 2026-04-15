@@ -178,6 +178,8 @@
             <span class="btn-text" data-i18n="analyzeArea">Analyze Area</span>
           </button>
 
+          <p id="search-terrain-credit" class="terrain-credit"></p>
+
         </div>
       </aside>
 
@@ -362,6 +364,14 @@
             </div>
 
             <div class="control-group">
+              <span class="label-text" data-i18n="radioSectorAngle">Sector Angle</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-sector-angle" min="1" max="360" value="60" step="1">
+                <span class="radio-unit">&deg;</span>
+              </div>
+            </div>
+
+            <div class="control-group">
               <span class="label-text" data-i18n="radioFrequency">Frequency</span>
               <select id="radio-frequency" class="radio-select">
                 <option value="144" selected data-i18n="radioFreqVHF">VHF 2m (144 MHz)</option>
@@ -369,38 +379,99 @@
               </select>
             </div>
 
-            <div class="control-group">
-              <span class="label-text" data-i18n="radioResolution">Resolution</span>
-              <select id="radio-resolution" class="radio-select">
-                <option value="auto" selected data-i18n="radioResAuto">Auto</option>
-                <option value="12">z12 (~30 m/px)</option>
-                <option value="11">z11 (~60 m/px)</option>
-                <option value="10">z10 (~120 m/px)</option>
-                <option value="9">z9 (~240 m/px)</option>
-                <option value="8">z8 (~480 m/px)</option>
-              </select>
-            </div>
-
-            <div class="control-group">
-              <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
-              <select id="radio-itm-engine" class="radio-select">
-                <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
-                <option value="js" data-i18n="radioEngineJs">JavaScript</option>
-              </select>
+            <div class="control-group control-group-full">
+              <p class="radio-subhint" data-i18n="radioDirectionHint">After placing TX, right-click or long-press to set a direction target. The preview sector updates before analysis.</p>
             </div>
 
             <div class="control-group control-group-full">
-              <label class="radio-checkbox-label">
-                <input type="checkbox" id="radio-radar-sweep">
-                <span data-i18n="radioSweepMode">Sweep mode</span>
-              </label>
+              <button id="radio-clear-direction" type="button" class="xp-secondary-btn radio-secondary-btn" hidden data-i18n="radioClearDirection">Clear Direction</button>
             </div>
 
             <div class="control-group control-group-full">
-              <label class="radio-checkbox-label">
-                <input type="checkbox" id="radio-adaptive-culling" checked>
-                <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
-              </label>
+              <details id="radio-advanced-settings" class="radio-advanced">
+                <summary class="radio-advanced-summary" data-i18n="radioAdvancedSettings">Advanced settings</summary>
+                <div class="radio-advanced-body">
+                  <div class="radio-advanced-grid">
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioResolution">Resolution</span>
+                      <select id="radio-resolution" class="radio-select">
+                        <option value="auto" selected data-i18n="radioResAuto">Auto</option>
+                        <option value="12">z12 (~30 m/px)</option>
+                        <option value="11">z11 (~60 m/px)</option>
+                        <option value="10">z10 (~120 m/px)</option>
+                        <option value="9">z9 (~240 m/px)</option>
+                        <option value="8">z8 (~480 m/px)</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
+                      <select id="radio-itm-engine" class="radio-select">
+                        <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
+                        <option value="js" data-i18n="radioEngineJs">JavaScript</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-radar-sweep">
+                        <span data-i18n="radioSweepMode">Sweep mode</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-adaptive-culling" checked>
+                        <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label" id="radio-fast-fill-label">
+                        <input type="checkbox" id="radio-fast-fill" checked>
+                        <span data-i18n="radioFastFill">Fast-fill strong blocks</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioDebugOverlays">Debug overlays</div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-debug-downloaded-tiles">
+                        <span data-i18n="radioDebugDownloadedTiles">Downloaded tiles</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-debug-skipped-tiles">
+                        <span data-i18n="radioDebugSkippedTiles">Skipped tiles</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-debug-tile-borders">
+                        <span data-i18n="radioDebugTileBorders">Tile borders</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-debug-wedge-borders">
+                        <span data-i18n="radioDebugWedgeBorders">Wedge borders</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-debug-analysis-bounds">
+                        <span data-i18n="radioDebugAnalysisBounds">Analysis bounds</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -426,6 +497,7 @@
           </div>
 
           <button id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
+          <p id="radio-terrain-credit" class="radio-subhint radio-terrain-credit"></p>
         </div>
       </aside>
 

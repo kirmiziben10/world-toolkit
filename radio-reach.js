@@ -7,7 +7,10 @@
 
   var TerrainTiles = window.TerrainTiles;
   var getTile = TerrainTiles.getTile;
+  var getTileWithMetadata = TerrainTiles.getTileWithMetadata;
   var metersPerPixel = TerrainTiles.metersPerPixel;
+  var tileToLat = TerrainTiles.tileToLat;
+  var tileToLng = TerrainTiles.tileToLng;
   var t = window.i18n.t;
   var ANALYSIS_ZOOM = 12;
   var EARTH_RADIUS = 6378137;
@@ -21,6 +24,9 @@
   var MEMORY_RISK_RATIO_WARN = 0.35;
   var MEMORY_RISK_RATIO_BLOCK = 0.6;
   var SWEEP_TILE_FETCH_CONCURRENCY = 4;
+  var RADAR_SWEEP_WEDGE_DEG = 10;
+  var RADIO_DEBUG_PANE = 'radio-debug-pane';
+  var RADIO_PREVIEW_PANE = 'radio-preview-pane';
   // ImageData (4 B/px) + band buffer (1 B/px) + canvas backing store (~4 B/px).
   var BITMAP_BYTES_PER_PIXEL = 9;
   var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
@@ -32,6 +38,10 @@
   var radioState = {
     map: null,
     marker: null,
+    directionLat: null,
+    directionLng: null,
+    debugLayer: null,
+    previewLayer: null,
     lat: null,
     lng: null,
     worker: null,
@@ -40,8 +50,11 @@
     running: false,
     startTime: 0,
     analysisToken: 0,
+    coverageBounds: null,
     analysisTileCount: 0,
     analysisTileKeys: null,
+    debugRefreshQueued: false,
+    debugTileRecords: null,
   };
 
   // ===== DOM refs (cached on init) =====
@@ -49,9 +62,12 @@
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput,
-      resolutionSelect,
+      resolutionSelect, sectorAngleInput,
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
-      radarSweepCheck, adaptiveCullingCheck, itmEngineSelect;
+      radarSweepCheck, adaptiveCullingCheck, fastFillCheck,
+      clearDirectionBtn, fastFillLabelEl, radioTerrainCreditEl, itmEngineSelect,
+      advancedSettingsEl, debugDownloadedTilesCheck, debugSkippedTilesCheck,
+      debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -72,6 +88,7 @@
     statsEl = document.getElementById('radio-stats');
     antennaInput = document.getElementById('radio-antenna-height');
     radiusInput = document.getElementById('radio-radius');
+    sectorAngleInput = document.getElementById('radio-sector-angle');
     frequencySelect = document.getElementById('radio-frequency');
     resolutionSelect = document.getElementById('radio-resolution');
     txPowerInput = document.getElementById('radio-tx-power');
@@ -81,17 +98,33 @@
     unfilteredCheck = document.getElementById('radio-unfiltered');
     radarSweepCheck = document.getElementById('radio-radar-sweep');
     adaptiveCullingCheck = document.getElementById('radio-adaptive-culling');
+    fastFillCheck = document.getElementById('radio-fast-fill');
+    fastFillLabelEl = document.getElementById('radio-fast-fill-label');
+    clearDirectionBtn = document.getElementById('radio-clear-direction');
+    radioTerrainCreditEl = document.getElementById('radio-terrain-credit');
     itmEngineSelect = document.getElementById('radio-itm-engine');
+    advancedSettingsEl = document.getElementById('radio-advanced-settings');
+    debugDownloadedTilesCheck = document.getElementById('radio-debug-downloaded-tiles');
+    debugSkippedTilesCheck = document.getElementById('radio-debug-skipped-tiles');
+    debugTileBordersCheck = document.getElementById('radio-debug-tile-borders');
+    debugWedgeBordersCheck = document.getElementById('radio-debug-wedge-borders');
+    debugAnalysisBoundsCheck = document.getElementById('radio-debug-analysis-bounds');
 
     analyzeBtnEl.addEventListener('click', startAnalysis);
     clearBtnEl.addEventListener('click', clearAll);
+    if (clearDirectionBtn) clearDirectionBtn.addEventListener('click', clearDirectionTarget);
 
     // Stats panel close button
     document.getElementById('radio-close-stats').addEventListener('click', function () {
       statsPanelEl.hidden = true;
     });
+    document.addEventListener('i18n:changed', updateTerrainCreditHtml);
 
     bindWarningInputs();
+    bindDebugInputs();
+    syncFastFillControl();
+    initAdvancedSettings();
+    updateTerrainCreditHtml();
     updateAnalysisWarning();
 
     // Controls panel toggle
@@ -99,6 +132,7 @@
 
     // Initialize own Leaflet map
     initMap();
+    updateDirectionPreview();
   }
 
   // ===== Map =====
@@ -108,6 +142,14 @@
       zoom: 7,
       zoomControl: false,
     });
+    var debugPane = radioState.map.createPane(RADIO_DEBUG_PANE);
+    debugPane.style.zIndex = '540';
+    debugPane.style.pointerEvents = 'none';
+    var previewPane = radioState.map.createPane(RADIO_PREVIEW_PANE);
+    previewPane.style.zIndex = '550';
+    previewPane.style.pointerEvents = 'none';
+    radioState.debugLayer = L.layerGroup().addTo(radioState.map);
+    radioState.previewLayer = L.layerGroup().addTo(radioState.map);
 
     // Base layers
     var topo = L.tileLayer(
@@ -149,9 +191,17 @@
       }));
     });
 
+    radioState.map.getContainer().addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+    });
+
     // Map click places transmitter
     radioState.map.on('click', function (e) {
       handleMapClick(e.latlng);
+    });
+    radioState.map.on('contextmenu', function (e) {
+      if (e.originalEvent) e.originalEvent.preventDefault();
+      handleDirectionTarget(e.latlng);
     });
   }
 
@@ -188,6 +238,19 @@
     });
   }
 
+  function initAdvancedSettings() {
+    if (!advancedSettingsEl) return;
+
+    var storageKey = 'sv_radio_advanced_open';
+    if (localStorage.getItem(storageKey) === '1') {
+      advancedSettingsEl.open = true;
+    }
+
+    advancedSettingsEl.addEventListener('toggle', function () {
+      localStorage.setItem(storageKey, advancedSettingsEl.open ? '1' : '0');
+    });
+  }
+
   // ===== Map Click Handler =====
   function handleMapClick(latlng) {
     if (radioState.running) return;
@@ -213,7 +276,188 @@
     coordsEl.hidden = false;
     instructionEl.hidden = true;
     analyzeBtnEl.disabled = false;
+    updateDirectionPreview();
     updateAnalysisWarning();
+  }
+
+  function handleDirectionTarget(latlng) {
+    if (radioState.running || radioState.lat === null) return;
+
+    radioState.directionLat = latlng.lat;
+    radioState.directionLng = latlng.lng;
+
+    updateDirectionPreview();
+    updateAnalysisWarning();
+  }
+
+  function clearDirectionTarget() {
+    radioState.directionLat = null;
+    radioState.directionLng = null;
+    updateDirectionPreview();
+    updateAnalysisWarning();
+  }
+
+  function getSectorConfig() {
+    var angleDeg = sectorAngleInput ? clampNumber(sectorAngleInput.value, 1, 360, 60) : 60;
+    if (sectorAngleInput) sectorAngleInput.value = angleDeg;
+
+    if (radioState.lat === null || radioState.lng === null ||
+        radioState.directionLat === null || radioState.directionLng === null) {
+      return {
+        hasTarget: false,
+        enabled: false,
+        angleDeg: angleDeg,
+        bearingDeg: 0
+      };
+    }
+
+    return {
+      hasTarget: true,
+      enabled: angleDeg < 360,
+      angleDeg: angleDeg,
+      bearingDeg: bearingFromLatLng(
+        radioState.lat,
+        radioState.lng,
+        radioState.directionLat,
+        radioState.directionLng
+      )
+    };
+  }
+
+  function hasDirectionTarget() {
+    return radioState.directionLat !== null && radioState.directionLng !== null;
+  }
+
+  function updateDirectionPreview() {
+    if (!radioState.previewLayer) return;
+
+    radioState.previewLayer.clearLayers();
+    syncSectorAngleControl();
+    if (clearDirectionBtn) {
+      clearDirectionBtn.hidden = !hasDirectionTarget();
+    }
+    scheduleDebugOverlayRefresh();
+
+    if (radioState.lat === null || radioState.lng === null) return;
+
+    var txLatLng = L.latLng(radioState.lat, radioState.lng);
+    var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
+    var radiusM = radiusKm * 1000;
+    var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var freqMHz = parseFloat(frequencySelect.value);
+    var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
+    var powerLimitM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+
+    L.circle(txLatLng, {
+      pane: RADIO_PREVIEW_PANE,
+      radius: radiusM,
+      color: '#09ACE2',
+      weight: 2,
+      opacity: 0.75,
+      dashArray: '10 8',
+      fillColor: '#09ACE2',
+      fillOpacity: 0.03,
+      interactive: false
+    }).addTo(radioState.previewLayer);
+
+    if (!radarSweep && powerLimitM < radiusM - 1) {
+      L.circle(txLatLng, {
+        pane: RADIO_PREVIEW_PANE,
+        radius: powerLimitM,
+        color: '#D5B456',
+        weight: 2,
+        opacity: 0.95,
+        dashArray: '4 6',
+        fillColor: '#D5B456',
+        fillOpacity: 0.05,
+        interactive: false
+      }).addTo(radioState.previewLayer);
+    }
+
+    if (!hasDirectionTarget()) {
+      return;
+    }
+
+    var targetLatLng = L.latLng(radioState.directionLat, radioState.directionLng);
+    var sectorConfig = getSectorConfig();
+
+    L.polyline([txLatLng, targetLatLng], {
+      pane: RADIO_PREVIEW_PANE,
+      color: '#D5B456',
+      weight: 2,
+      opacity: 0.9,
+      dashArray: '6 6',
+      interactive: false
+    }).addTo(radioState.previewLayer);
+
+    L.circleMarker(targetLatLng, {
+      pane: RADIO_PREVIEW_PANE,
+      radius: 6,
+      color: '#8C6B12',
+      weight: 2,
+      fillColor: '#FFF2C0',
+      fillOpacity: 0.95,
+      interactive: false
+    }).addTo(radioState.previewLayer);
+
+    if (!sectorConfig.enabled) return;
+
+    var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
+    var sectorLatLngs = buildSectorPreviewLatLngs(
+      radioState.lat,
+      radioState.lng,
+      sectorConfig.bearingDeg,
+      sectorConfig.angleDeg,
+      radiusKm * 1000
+    );
+
+    L.polygon(sectorLatLngs, {
+      pane: RADIO_PREVIEW_PANE,
+      color: '#D5B456',
+      weight: 2,
+      opacity: 0.95,
+      dashArray: '8 6',
+      fillColor: '#D5B456',
+      fillOpacity: 0.12,
+      interactive: false
+    }).addTo(radioState.previewLayer);
+  }
+
+  function syncFastFillControl() {
+    if (!fastFillCheck) return;
+    var enabled = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
+    fastFillCheck.disabled = !enabled;
+    if (fastFillLabelEl) {
+      fastFillLabelEl.classList.toggle('is-disabled', !enabled);
+    }
+  }
+
+  function syncSectorAngleControl() {
+    if (!sectorAngleInput) return;
+    var enabled = hasDirectionTarget();
+    sectorAngleInput.disabled = !enabled;
+    var groupEl = sectorAngleInput.closest ? sectorAngleInput.closest('.control-group') : null;
+    if (groupEl) {
+      groupEl.classList.toggle('is-disabled', !enabled);
+    }
+  }
+
+  function updateTerrainCreditHtml() {
+    if (!radioTerrainCreditEl) return;
+    var terrainLink = '<a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener noreferrer">Mapzen Terrain Tiles on AWS Open Data</a>';
+    var terrainAttributionLink = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">terrain attribution guide</a>';
+    radioTerrainCreditEl.innerHTML = t('radioTerrainCredit', {
+      terrain: terrainLink,
+      attribution: terrainAttributionLink
+    });
+  }
+
+  function bindDebugInputs() {
+    [debugDownloadedTilesCheck, debugSkippedTilesCheck, debugTileBordersCheck,
+     debugWedgeBordersCheck, debugAnalysisBoundsCheck].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('change', scheduleDebugOverlayRefresh);
+    });
   }
 
   // ===== Analysis =====
@@ -227,7 +471,9 @@
     var unfiltered = !!(unfilteredCheck && unfilteredCheck.checked);
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
     var adaptiveCulling = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
+    var fastFillEnabled = !!(fastFillCheck && fastFillCheck.checked && adaptiveCulling);
     var itmEngine = itmEngineSelect ? itmEngineSelect.value : 'wasm';
+    var sectorConfig = getSectorConfig();
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
     var analysisZoom;
     if (resVal === 'auto') {
@@ -311,6 +557,10 @@
       itmEngine: itmEngine,
       radarSweep: radarSweep,
       adaptiveCulling: adaptiveCulling,
+      fastFillEnabled: fastFillEnabled,
+      sectorEnabled: sectorConfig.enabled,
+      sectorBearingDeg: sectorConfig.bearingDeg,
+      sectorAngleDeg: sectorConfig.angleDeg,
     });
   }
 
@@ -325,6 +575,8 @@
 
     loadTerrainTiles(tiles, radioState._isRadarSweep ? SWEEP_TILE_FETCH_CONCURRENCY : 0).then(function (results) {
       if (!isAnalysisSessionActive(analysisToken) || !targetWorker) return;
+
+      noteDebugTileResults(results);
 
       var transfers = [];
       var tileData = results.map(function (r) {
@@ -383,8 +635,20 @@
   }
 
   function loadTerrainTile(tc) {
+    if (getTileWithMetadata) {
+      return getTileWithMetadata(tc.z, tc.x, tc.y).then(function (result) {
+        return {
+          z: tc.z,
+          x: tc.x,
+          y: tc.y,
+          data: result.data,
+          fromCache: !!result.fromCache
+        };
+      });
+    }
+
     return getTile(tc.z, tc.x, tc.y).then(function (data) {
-      return { z: tc.z, x: tc.x, y: tc.y, data: data };
+      return { z: tc.z, x: tc.x, y: tc.y, data: data, fromCache: false };
     });
   }
 
@@ -404,6 +668,14 @@
   }
 
   function handleCoverageBounds(msg) {
+    radioState.coverageBounds = {
+      minLat: msg.minLat,
+      maxLat: msg.maxLat,
+      minLng: msg.minLng,
+      maxLng: msg.maxLng
+    };
+    scheduleDebugOverlayRefresh();
+
     if (!radioState.canvasLayer) return;
     radioState.canvasLayer.initBitmap(
       msg.minLat, msg.maxLat, msg.minLng, msg.maxLng,
@@ -477,6 +749,31 @@
       radioState._totalCells += msg.totalCells;
     } else {
       radioState._totalCells = msg.totalCells;
+    }
+
+    if (msg.totalCells === 0) {
+      if (msg.isRadarSweep) {
+        radioState._sweepWedgesCompleted++;
+        var emptyWedgePct = Math.round((radioState._sweepWedgesCompleted / radioState._sweepTotalWedges) * 100);
+        if (emptyWedgePct > 99) emptyWedgePct = 99;
+        progressBarEl.style.width = emptyWedgePct + '%';
+        progressTextEl.textContent = t('radioSweepProgress', {
+          done: radioState._sweepWedgesCompleted,
+          total: radioState._sweepTotalWedges
+        });
+        radioState.worker.postMessage({ type: 'wedgeDone' });
+      } else {
+        handleDone({
+          tilesUsed: getAnalysisTileCount(),
+          cellsEvaluated: 0,
+          strongCount: 0,
+          usableCount: 0,
+          marginalCount: 0,
+          maxReachM: 0,
+          workerCount: 1
+        });
+      }
+      return;
     }
 
     // Determine slice count: split mask into horizontal row-bands
@@ -580,7 +877,8 @@
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered,
           itmEngine: txParams.itmEngine,
-          adaptiveCulling: txParams.adaptiveCulling
+          adaptiveCulling: txParams.adaptiveCulling,
+          fastFillEnabled: txParams.fastFillEnabled
         }, [sliceMaskCopy.buffer]);
       }
     }
@@ -640,7 +938,8 @@
         mpp: txParams.mpp,
         unfiltered: radioState._unfiltered,
         itmEngine: txParams.itmEngine,
-        adaptiveCulling: txParams.adaptiveCulling
+        adaptiveCulling: txParams.adaptiveCulling,
+        fastFillEnabled: txParams.fastFillEnabled
       }, [sliceMaskCopy.buffer]);
     }
   }
@@ -821,14 +1120,24 @@
     }
     radioState.lat = null;
     radioState.lng = null;
+    radioState.directionLat = null;
+    radioState.directionLng = null;
+    radioState.coverageBounds = null;
     radioState.analysisTileCount = 0;
     radioState.analysisTileKeys = null;
+    radioState.debugTileRecords = null;
 
     if (radioState.marker) {
       radioState.map.removeLayer(radioState.marker);
       radioState.marker = null;
     }
     removeOverlay();
+    if (radioState.previewLayer) {
+      radioState.previewLayer.clearLayers();
+    }
+    if (radioState.debugLayer) {
+      radioState.debugLayer.clearLayers();
+    }
 
     coordsEl.hidden = true;
     instructionEl.hidden = false;
@@ -839,6 +1148,7 @@
       warningEl.removeAttribute('data-level');
     }
     clearBtnEl.hidden = true;
+    if (clearDirectionBtn) clearDirectionBtn.hidden = true;
     progressOverlayEl.hidden = true;
     statsPanelEl.hidden = true;
     progressBarEl.style.width = '0%';
@@ -1074,8 +1384,11 @@
 
   function beginAnalysisSession() {
     radioState.analysisToken += 1;
+    radioState.coverageBounds = null;
     radioState.analysisTileCount = 0;
     radioState.analysisTileKeys = Object.create(null);
+    radioState.debugTileRecords = Object.create(null);
+    scheduleDebugOverlayRefresh();
     return radioState.analysisToken;
   }
 
@@ -1180,8 +1493,11 @@
   }
 
   function bindWarningInputs() {
-    var update = function () { updateAnalysisWarning(); };
-    [antennaInput, radiusInput, txPowerInput].forEach(function (el) {
+    var update = function () {
+      updateAnalysisWarning();
+      updateDirectionPreview();
+    };
+    [antennaInput, radiusInput, txPowerInput, sectorAngleInput].forEach(function (el) {
       if (!el) return;
       el.addEventListener('input', update);
       el.addEventListener('change', update);
@@ -1190,6 +1506,169 @@
       if (!el) return;
       el.addEventListener('change', update);
     });
+    if (adaptiveCullingCheck) {
+      adaptiveCullingCheck.addEventListener('change', syncFastFillControl);
+    }
+  }
+
+  function noteDebugTileResults(results) {
+    if (!results || !results.length) return;
+
+    var records = radioState.debugTileRecords;
+    var changed = false;
+    if (!records) {
+      records = Object.create(null);
+      radioState.debugTileRecords = records;
+    }
+
+    for (var i = 0; i < results.length; i++) {
+      var result = results[i];
+      var key = result.z + '/' + result.x + '/' + result.y;
+      if (records[key]) continue;
+      records[key] = {
+        z: result.z,
+        x: result.x,
+        y: result.y,
+        status: result.fromCache ? 'skipped' : 'downloaded'
+      };
+      changed = true;
+    }
+
+    if (changed && hasTileDebugOverlaysEnabled()) {
+      scheduleDebugOverlayRefresh();
+    }
+  }
+
+  function scheduleDebugOverlayRefresh() {
+    if (radioState.debugRefreshQueued) return;
+    radioState.debugRefreshQueued = true;
+
+    var schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : function (callback) { return setTimeout(callback, 16); };
+
+    schedule(function () {
+      radioState.debugRefreshQueued = false;
+      renderDebugOverlays();
+    });
+  }
+
+  function renderDebugOverlays() {
+    if (!radioState.debugLayer) return;
+
+    radioState.debugLayer.clearLayers();
+
+    var flags = getDebugOverlayFlags();
+    if (!flags.showDownloadedTiles && !flags.showSkippedTiles &&
+        !flags.showTileBorders && !flags.showWedgeBorders &&
+        !flags.showAnalysisBounds) {
+      return;
+    }
+
+    if (hasTileDebugOverlaysEnabled()) {
+      var records = radioState.debugTileRecords;
+      var keys = records ? Object.keys(records).sort() : [];
+      for (var i = 0; i < keys.length; i++) {
+        var record = records[keys[i]];
+        var tileStyle = getDebugTileStyle(record, flags);
+        if (!tileStyle) continue;
+        L.rectangle(getTileLatLngBounds(record.z, record.x, record.y), tileStyle)
+          .addTo(radioState.debugLayer);
+      }
+    }
+
+    if (flags.showAnalysisBounds && radioState.coverageBounds) {
+      L.rectangle([
+        [radioState.coverageBounds.minLat, radioState.coverageBounds.minLng],
+        [radioState.coverageBounds.maxLat, radioState.coverageBounds.maxLng]
+      ], {
+        pane: RADIO_DEBUG_PANE,
+        color: '#bb4526',
+        weight: 1.5,
+        opacity: 0.82,
+        dashArray: '7 5',
+        fillOpacity: 0,
+        interactive: false
+      }).addTo(radioState.debugLayer);
+    }
+
+    if (flags.showWedgeBorders && radioState.lat !== null && radioState.lng !== null &&
+        radarSweepCheck && radarSweepCheck.checked) {
+      drawDebugSweepWedges();
+    }
+  }
+
+  function getDebugOverlayFlags() {
+    return {
+      showDownloadedTiles: !!(debugDownloadedTilesCheck && debugDownloadedTilesCheck.checked),
+      showSkippedTiles: !!(debugSkippedTilesCheck && debugSkippedTilesCheck.checked),
+      showTileBorders: !!(debugTileBordersCheck && debugTileBordersCheck.checked),
+      showWedgeBorders: !!(debugWedgeBordersCheck && debugWedgeBordersCheck.checked),
+      showAnalysisBounds: !!(debugAnalysisBoundsCheck && debugAnalysisBoundsCheck.checked)
+    };
+  }
+
+  function hasTileDebugOverlaysEnabled() {
+    var flags = getDebugOverlayFlags();
+    return flags.showDownloadedTiles || flags.showSkippedTiles || flags.showTileBorders;
+  }
+
+  function getDebugTileStyle(record, flags) {
+    var showFill = (record.status === 'downloaded' && flags.showDownloadedTiles) ||
+      (record.status === 'skipped' && flags.showSkippedTiles);
+    if (!showFill && !flags.showTileBorders) return null;
+
+    var statusColor = record.status === 'downloaded' ? '#0e8bc0' : '#c48a18';
+    var neutralBorder = '#7a6331';
+
+    return {
+      pane: RADIO_DEBUG_PANE,
+      color: showFill ? statusColor : neutralBorder,
+      weight: showFill ? 1.2 : 1,
+      opacity: showFill ? 0.82 : 0.5,
+      dashArray: record.status === 'skipped' ? '6 4' : null,
+      fillColor: statusColor,
+      fillOpacity: showFill ? (record.status === 'downloaded' ? 0.16 : 0.13) : 0,
+      interactive: false
+    };
+  }
+
+  function getTileLatLngBounds(z, x, y) {
+    return [
+      [tileToLat(y + 1, z), tileToLng(x, z)],
+      [tileToLat(y, z), tileToLng(x + 1, z)]
+    ];
+  }
+
+  function drawDebugSweepWedges() {
+    var txLatLng = L.latLng(radioState.lat, radioState.lng);
+    var radiusM = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30) * 1000;
+
+    L.circle(txLatLng, {
+      pane: RADIO_DEBUG_PANE,
+      radius: radiusM,
+      color: '#8f5a17',
+      weight: 1,
+      opacity: 0.55,
+      dashArray: '2 9',
+      fillOpacity: 0,
+      interactive: false
+    }).addTo(radioState.debugLayer);
+
+    for (var bearing = 0; bearing < 360; bearing += RADAR_SWEEP_WEDGE_DEG) {
+      var edgePoint = destinationPoint(radioState.lat, radioState.lng, bearing, radiusM);
+      L.polyline([
+        txLatLng,
+        [edgePoint.lat, edgePoint.lng]
+      ], {
+        pane: RADIO_DEBUG_PANE,
+        color: '#8f5a17',
+        weight: 1,
+        opacity: 0.52,
+        dashArray: '3 8',
+        interactive: false
+      }).addTo(radioState.debugLayer);
+    }
   }
 
   function updateAnalysisWarning() {
@@ -1291,6 +1770,74 @@
             Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
             Math.sin(dLng / 2) * Math.sin(dLng / 2);
     return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function normalizeBearing(deg) {
+    deg = deg % 360;
+    return deg < 0 ? deg + 360 : deg;
+  }
+
+  function bearingFromLatLng(lat1, lng1, lat2, lng2) {
+    var toRad = Math.PI / 180;
+    var phi1 = lat1 * toRad;
+    var phi2 = lat2 * toRad;
+    var dLng = (lng2 - lng1) * toRad;
+    var y = Math.sin(dLng) * Math.cos(phi2);
+    var x = Math.cos(phi1) * Math.sin(phi2) -
+            Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLng);
+    return normalizeBearing(Math.atan2(y, x) * 180 / Math.PI);
+  }
+
+  function destinationPoint(lat, lng, bearingDeg, distanceM) {
+    var angularDistance = distanceM / EARTH_RADIUS;
+    var bearingRad = normalizeBearing(bearingDeg) * Math.PI / 180;
+    var latRad = lat * Math.PI / 180;
+    var lngRad = lng * Math.PI / 180;
+    var sinLat = Math.sin(latRad);
+    var cosLat = Math.cos(latRad);
+    var sinAd = Math.sin(angularDistance);
+    var cosAd = Math.cos(angularDistance);
+    var sinBearing = Math.sin(bearingRad);
+    var cosBearing = Math.cos(bearingRad);
+
+    var destLat = Math.asin(sinLat * cosAd + cosLat * sinAd * cosBearing);
+    var destLng = lngRad + Math.atan2(
+      sinBearing * sinAd * cosLat,
+      cosAd - sinLat * Math.sin(destLat)
+    );
+
+    return {
+      lat: destLat * 180 / Math.PI,
+      lng: ((destLng * 180 / Math.PI + 540) % 360) - 180
+    };
+  }
+
+  function buildSectorPreviewLatLngs(lat, lng, bearingDeg, angleDeg, radiusM) {
+    var points = [];
+    var startBearing = bearingDeg - angleDeg / 2;
+    var endBearing = bearingDeg + angleDeg / 2;
+    var edgeSteps = Math.max(12, Math.ceil(radiusM / 12000));
+    var arcSteps = Math.max(24, Math.ceil(angleDeg / 3));
+
+    points.push([lat, lng]);
+
+    for (var edgeOut = 1; edgeOut <= edgeSteps; edgeOut++) {
+      var outPoint = destinationPoint(lat, lng, startBearing, radiusM * edgeOut / edgeSteps);
+      points.push([outPoint.lat, outPoint.lng]);
+    }
+
+    for (var arcIndex = 1; arcIndex <= arcSteps; arcIndex++) {
+      var sampleBearing = startBearing + (angleDeg * arcIndex / arcSteps);
+      var arcPoint = destinationPoint(lat, lng, sampleBearing, radiusM);
+      points.push([arcPoint.lat, arcPoint.lng]);
+    }
+
+    for (var edgeBack = edgeSteps - 1; edgeBack >= 0; edgeBack--) {
+      var backPoint = destinationPoint(lat, lng, endBearing, radiusM * edgeBack / edgeSteps);
+      points.push([backPoint.lat, backPoint.lng]);
+    }
+
+    return points;
   }
 
   function sanitize(str) {

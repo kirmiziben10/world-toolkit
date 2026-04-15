@@ -92,10 +92,14 @@
     return Promise.reject(new Error('No terrain tile decoder available in this environment.'));
   }
 
-  function getTile(zoom, x, y) {
+  function getTileEntry(zoom, x, y) {
     var key = zoom + '/' + x + '/' + y;
     if (tileCache.has(key)) {
-      return tileCache.get(key);
+      return {
+        key: key,
+        promise: tileCache.get(key),
+        fromCache: true,
+      };
     }
 
     var promise = getImageData(TERRAIN_URL + '/' + key + '.png')
@@ -108,7 +112,26 @@
       });
 
     tileCache.set(key, promise);
-    return promise;
+    return {
+      key: key,
+      promise: promise,
+      fromCache: false,
+    };
+  }
+
+  function getTile(zoom, x, y) {
+    return getTileEntry(zoom, x, y).promise;
+  }
+
+  function getTileWithMetadata(zoom, x, y) {
+    var entry = getTileEntry(zoom, x, y);
+    return entry.promise.then(function (data) {
+      return {
+        key: entry.key,
+        data: data,
+        fromCache: entry.fromCache,
+      };
+    });
   }
 
   root.TerrainTiles = {
@@ -116,6 +139,7 @@
     TERRAIN_URL: TERRAIN_URL,
     decodeTerrarium: decodeTerrarium,
     getTile: getTile,
+    getTileWithMetadata: getTileWithMetadata,
     lngToTileX: lngToTileX,
     latToTileY: latToTileY,
     tileToLng: tileToLng,

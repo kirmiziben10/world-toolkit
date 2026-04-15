@@ -39,6 +39,7 @@ var freqMHz = 144;
 var txPowerW = 5;
 var sliceId = 0;
 var adaptiveCulling = false;
+var fastFillEnabled = true;
 var bitmapOffsetX = 0;
 var bitmapOffsetY = 0;
 
@@ -372,6 +373,7 @@ function handleStartInner(msg) {
   mpp = msg.mpp;
   sliceId = msg.sliceId;
   adaptiveCulling = msg.adaptiveCulling || false;
+  fastFillEnabled = msg.fastFillEnabled !== false;
   maskOriginGlobalX = msg.maskOriginGlobalX;
   maskOriginGlobalY = msg.maskOriginGlobalY;
   bitmapOffsetX = msg.bitmapOffsetX || 0;
@@ -606,6 +608,7 @@ function processSlice(cells, totalCells) {
       }
 
       if (
+        fastFillEnabled &&
         scoutBands.length === scoutPlan.scouts.length &&
         scoutPlan.elevSpan <= ADAPTIVE_FILL_ELEV_SPAN_M &&
         minArrayValue(scoutMargins) >= ADAPTIVE_FILL_MARGIN_DB

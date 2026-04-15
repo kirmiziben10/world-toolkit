@@ -167,6 +167,7 @@ function init() {
   initDrawControls();
   initSliders();
   initButtons();
+  updateSearchTerrainCreditHtml();
   updateGlobeAttribution();
   if (!IS_MOBILE) {
     initWindowDrag();
@@ -961,14 +962,31 @@ function buildHelpCreditsHtml() {
   const silkLink = '<a href="https://www.famfamfam.com/lab/icons/silk/" target="_blank" rel="noopener noreferrer">Silk by Mark James</a>';
   const ccLink = '<a href="https://creativecommons.org/licenses/by/2.5/" target="_blank" rel="noopener noreferrer">CC BY 2.5</a>';
   const threeLink = '<a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a>';
+  const terrainLink = '<a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener noreferrer">Mapzen Terrain Tiles on AWS Open Data</a>';
+  const terrainAttributionLink = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">terrain attribution guide</a>';
 
   return [
     `<div class="help-tooltip-footer-title">${t('helpCreditsTitle')}</div>`,
     `<p>${t('helpCreditsMap')}</p>`,
     `<p>${t('helpCreditsGeocoding')}</p>`,
+    `<p>${t('helpCreditsTerrain', { terrain: terrainLink })}</p>`,
+    `<p>${t('helpCreditsTerrainSources', { attribution: terrainAttributionLink })}</p>`,
     `<p>${t('helpCreditsIcons', { silk: silkLink, license: ccLink })}</p>`,
     `<p>${t('helpCreditsRendering', { three: threeLink })}</p>`,
   ].join('');
+}
+
+function updateSearchTerrainCreditHtml() {
+  const creditEl = document.getElementById('search-terrain-credit');
+  if (!creditEl) return;
+
+  const terrainLink = '<a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener noreferrer">Mapzen Terrain Tiles on AWS Open Data</a>';
+  const terrainAttributionLink = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">terrain attribution guide</a>';
+
+  creditEl.innerHTML = t('searchTerrainCredit', {
+    terrain: terrainLink,
+    attribution: terrainAttributionLink
+  });
 }
 
 function updateGlobeAttribution() {
@@ -1885,6 +1903,7 @@ function hideProgress() {
 function handleLanguageChange() {
   localizeDrawLocal();
   rebuildLayerControl();
+  updateSearchTerrainCreditHtml();
   updateGlobeAttribution();
   syncAllMaximizeButtons();
   validateSelection(state.selectionBounds);
