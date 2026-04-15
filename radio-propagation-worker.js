@@ -153,13 +153,45 @@ function buildProfile(lat1, lng1, lat2, lng2) {
   var spacingM = distM / (nSamples - 1);
   var profile = new Float32Array(nSamples);
 
+  // Sample elevations, marking missing tiles for interpolation
+  var MISSING = -99999;
+  var hasAnyValid = false;
   for (var i = 0; i < nSamples; i++) {
     var frac = i / (nSamples - 1);
     var lat = lat1 + (lat2 - lat1) * frac;
     var lng = lng1 + (lng2 - lng1) * frac;
     var elev = getElevation(lat, lng);
-    if (elev === null) return null;
-    profile[i] = elev;
+    if (elev === null) {
+      profile[i] = MISSING;
+    } else {
+      profile[i] = elev;
+      hasAnyValid = true;
+    }
+  }
+
+  // No valid samples at all — truly unreachable
+  if (!hasAnyValid) return null;
+
+  // Interpolate missing samples from nearest valid neighbors
+  for (var i = 0; i < nSamples; i++) {
+    if (profile[i] !== MISSING) continue;
+    // Find nearest valid sample before and after
+    var prevIdx = -1, nextIdx = -1;
+    for (var j = i - 1; j >= 0; j--) {
+      if (profile[j] !== MISSING) { prevIdx = j; break; }
+    }
+    for (var j = i + 1; j < nSamples; j++) {
+      if (profile[j] !== MISSING) { nextIdx = j; break; }
+    }
+    if (prevIdx >= 0 && nextIdx >= 0) {
+      // Linear interpolation between neighbors
+      var t = (i - prevIdx) / (nextIdx - prevIdx);
+      profile[i] = profile[prevIdx] + t * (profile[nextIdx] - profile[prevIdx]);
+    } else if (prevIdx >= 0) {
+      profile[i] = profile[prevIdx];
+    } else if (nextIdx >= 0) {
+      profile[i] = profile[nextIdx];
+    }
   }
 
   return { profile: profile, spacingM: spacingM };

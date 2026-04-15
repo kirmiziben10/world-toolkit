@@ -232,8 +232,11 @@ function handleStart(msg) {
 
     if (radarSweep) {
       startSweep();
-    } else if (adaptiveCulling || unfilteredMode) {
-      // Adaptive culling without sweep: skip Phase 1, use full circle mask
+    } else {
+      // Skip Phase 1 LOS pre-filter — the ITM propagation model in Phase 3
+      // handles terrain obstruction (diffraction, scattering) directly.
+      // Phase 1's aggressive ray-blocking created false dead zones behind
+      // terrain features that ITM could actually model propagation through.
       self.postMessage({ type: 'phase1Done', count: 0 });
       runPhase2Unfiltered(function (mask, mw, mh, totalCells) {
         self.postMessage({
@@ -246,28 +249,6 @@ function handleStart(msg) {
           heightPx: mh
         });
         runPhase3(mask, mw, mh, totalCells);
-      });
-    } else {
-      runPhase1(function (points) {
-        if (points.length === 0) {
-          self.postMessage({ type: 'done', stats: {
-            tilesUsed: tilesUsed, cellsEvaluated: 0,
-            strongCount: 0, usableCount: 0, marginalCount: 0, maxReachM: 0
-          }});
-          return;
-        }
-        runPhase2(points, function (mask, mw, mh, totalCells) {
-          self.postMessage({
-            type: 'coverageBounds',
-            minLat: globalPixelYToLat(maskOriginGlobalY + mh),
-            maxLat: globalPixelYToLat(maskOriginGlobalY),
-            minLng: globalPixelXToLng(maskOriginGlobalX),
-            maxLng: globalPixelXToLng(maskOriginGlobalX + mw),
-            widthPx: mw,
-            heightPx: mh
-          });
-          runPhase3(mask, mw, mh, totalCells);
-        });
       });
     }
   });
@@ -367,10 +348,15 @@ function runPhase1(callback) {
 // ===== Phase 2: Build evaluation mask =====
 
 function runPhase2Unfiltered(callback) {
-  // Build a full circular mask covering the entire requested radius — no LOS, no clamping
+  // Build a full circular mask with free-space distance clamping.
+  // The mask covers all cells within the effective radius — no LOS pre-filter.
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var clampRadiusM = Math.min(radiusM, fsMaxM);
+  var wasClamped = fsMaxM < radiusM;
+
   var txGX = lngToGlobalPixelX(txLng);
   var txGY = latToGlobalPixelY(txLat);
-  var radiusPx = Math.ceil(radiusM / mpp);
+  var radiusPx = Math.ceil(clampRadiusM / mpp);
   var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
 
   maskOriginGlobalX = Math.floor(txGX) - radiusPx - bufferPx;
@@ -386,14 +372,19 @@ function runPhase2Unfiltered(callback) {
       var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
       var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
       var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
-      if (dist <= radiusM) {
+      if (dist <= clampRadiusM) {
         mask[py * maskW + px] = 1;
         totalCells++;
       }
     }
   }
 
-  self.postMessage({ type: 'phase2Done', totalCells: totalCells });
+  var phase2Msg = { type: 'phase2Done', totalCells: totalCells };
+  if (wasClamped) {
+    phase2Msg.clampedRadiusKm = clampRadiusM / 1000;
+    phase2Msg.wasClamped = true;
+  }
+  self.postMessage(phase2Msg);
   callback(mask, maskW, maskH, totalCells);
 }
 
@@ -609,25 +600,12 @@ function processWedge() {
   var startDeg = sweepWedgeIndex * WEDGE_DEG;
   var endDeg = Math.min(startDeg + WEDGE_DEG, 360);
 
-  if (adaptiveCulling) {
-    // Skip Phase 1, build wedge arc mask directly
-    buildWedgeMaskUnfiltered(startDeg, endDeg, function (mask, mw, mh, totalCells) {
-      sendWedgePartition(mask, mw, mh, totalCells);
-    });
-  } else {
-    // Run Phase 1 LOS for this wedge's rays, then build mask from reachable points
-    runPhase1Wedge(startDeg, endDeg, function (points) {
-      if (points.length === 0) {
-        // No reachable points in this wedge — skip to next
-        sweepState = 'WAITING_FOR_MAIN';
-        advanceSweep();
-        return;
-      }
-      buildWedgeMaskFromPoints(points, startDeg, endDeg, function (mask, mw, mh, totalCells) {
-        sendWedgePartition(mask, mw, mh, totalCells);
-      });
-    });
-  }
+  // Always use unfiltered wedge mask — Phase 1 LOS ray-blocking is too
+  // aggressive and creates dead zones behind terrain. ITM in Phase 3
+  // handles diffraction/obstruction modeling directly.
+  buildWedgeMaskUnfiltered(startDeg, endDeg, function (mask, mw, mh, totalCells) {
+    sendWedgePartition(mask, mw, mh, totalCells);
+  });
 }
 
 function sendWedgePartition(mask, mw, mh, totalCells) {
