@@ -399,8 +399,8 @@ function processSlice(cells, totalCells) {
   var rxGainDbi = 0;
 
   var evaluated = 0;
-  // Binary batch buffer: Uint16Array triples [cellX, cellY, band, ...]
-  var batchBuf = new Uint16Array(COVERAGE_BATCH_SIZE * 3);
+  // Binary batch buffer: Float32Array triples [lat, lng, band, ...]
+  var batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
   var batchCount = 0;
   var strongCount = 0, usableCount = 0, marginalCount = 0;
   var maxReachM = 0;
@@ -415,7 +415,7 @@ function processSlice(cells, totalCells) {
       progress: progress,
       evaluated: evaluated
     }, [slice.buffer]);
-    batchBuf = new Uint16Array(COVERAGE_BATCH_SIZE * 3);
+    batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
     batchCount = 0;
   }
 
@@ -428,8 +428,8 @@ function processSlice(cells, totalCells) {
     else marginalCount++;
 
     var bi = batchCount * 3;
-    batchBuf[bi]     = cell.cellX;
-    batchBuf[bi + 1] = cell.cellY;
+    batchBuf[bi]     = cell.lat;
+    batchBuf[bi + 1] = cell.lng;
     batchBuf[bi + 2] = band;
     batchCount++;
 

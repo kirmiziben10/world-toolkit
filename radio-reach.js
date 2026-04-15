@@ -353,10 +353,10 @@
     });
 
     var layer = radioState.canvasLayer;
-    // Decode binary coverage: Uint16Array with [cellX, cellY, band, ...] triples
-    var data = new Uint16Array(msg.cells);
+    // Decode binary coverage: Float32Array with [lat, lng, band, ...] triples
+    var data = new Float32Array(msg.cells);
     for (var i = 0; i < data.length; i += 3) {
-      layer.setCellByBitmapXY(data[i], data[i + 1], data[i + 2]);
+      layer.setCellByLatLng(data[i], data[i + 1], data[i + 2]);
     }
     layer.scheduleRefresh();
   }
