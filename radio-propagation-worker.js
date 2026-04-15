@@ -182,7 +182,7 @@ function globalPixelXToLng(gpx) {
 }
 
 function collectChunkTiles(cells, startIdx, endIdx) {
-  // Find bbox of chunk cells only (not TX) for corner ray tracing
+  // Find bbox of chunk cells for direct chunk-tile inclusion
   var minLat = Infinity, maxLat = -Infinity;
   var minLng = Infinity, maxLng = -Infinity;
 
@@ -229,11 +229,10 @@ function collectChunkTiles(cells, startIdx, endIdx) {
     }
   }
 
-  // Trace rays from TX to the four geographic corners of the chunk
-  traceRayTiles(minLat, minLng);
-  traceRayTiles(minLat, maxLng);
-  traceRayTiles(maxLat, minLng);
-  traceRayTiles(maxLat, maxLng);
+  // Trace rays from TX to every cell in the chunk
+  for (var i = startIdx; i < endIdx; i++) {
+    traceRayTiles(cells[i].lat, cells[i].lng);
+  }
 
   // Also include the chunk's own tiles directly (cells need their own tile data)
   var chunkTxMin = lngToTileX(minLng, zoom);
