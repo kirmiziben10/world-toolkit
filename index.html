@@ -356,7 +356,7 @@
             <div class="control-group">
               <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
               <div class="radio-input-row">
-                <input type="number" id="radio-radius" min="5" max="100" value="30" step="1">
+                <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
                 <span class="radio-unit">km</span>
               </div>
             </div>
@@ -368,7 +368,43 @@
                 <option value="430" data-i18n="radioFreqUHF">UHF 70cm (430 MHz)</option>
               </select>
             </div>
+
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioResolution">Resolution</span>
+              <select id="radio-resolution" class="radio-select">
+                <option value="auto" selected data-i18n="radioResAuto">Auto</option>
+                <option value="12">z12 (~30 m/px)</option>
+                <option value="11">z11 (~60 m/px)</option>
+                <option value="10">z10 (~120 m/px)</option>
+                <option value="9">z9 (~240 m/px)</option>
+                <option value="8">z8 (~480 m/px)</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
+              <select id="radio-itm-engine" class="radio-select">
+                <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
+                <option value="js" data-i18n="radioEngineJs">JavaScript</option>
+              </select>
+            </div>
+
+            <div class="control-group control-group-full">
+              <label class="radio-checkbox-label">
+                <input type="checkbox" id="radio-radar-sweep">
+                <span data-i18n="radioSweepMode">Sweep mode</span>
+              </label>
+            </div>
+
+            <div class="control-group control-group-full">
+              <label class="radio-checkbox-label">
+                <input type="checkbox" id="radio-adaptive-culling" checked>
+                <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
+              </label>
+            </div>
           </div>
+
+          <div id="radio-warning" class="radio-warning" hidden></div>
 
           <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
             <span class="btn-text" data-i18n="radioAnalyze">Analyze</span>
@@ -430,16 +466,23 @@
       ['main-window', 'loved-window', 'starred-window', 'radio-window'].forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
-        // Restore layout position/size
-        var raw = localStorage.getItem('sv_layout_' + id);
-        if (raw) {
-          try {
-            var l = JSON.parse(raw);
-            el.style.top    = l.top    + 'px';
-            el.style.left   = l.left   + 'px';
-            el.style.width  = l.width  + 'px';
-            el.style.height = l.height + 'px';
-          } catch (e) {}
+        if (localStorage.getItem('sv_win_maximized_' + id) === 'true') {
+          el.style.top = '0px';
+          el.style.left = '0px';
+          el.style.width = window.innerWidth + 'px';
+          el.style.height = window.innerHeight + 'px';
+        } else {
+          // Restore layout position/size
+          var raw = localStorage.getItem('sv_layout_' + id);
+          if (raw) {
+            try {
+              var l = JSON.parse(raw);
+              el.style.top    = l.top    + 'px';
+              el.style.left   = l.left   + 'px';
+              el.style.width  = l.width  + 'px';
+              el.style.height = l.height + 'px';
+            } catch (e) {}
+          }
         }
         // Restore open/close state (on first visit, all windows start closed)
         if (isFirstVisit) {

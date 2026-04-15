@@ -4,8 +4,6 @@
 // Phase 3: Partitions mask cells into angular slices and delegates
 //          to propagation workers spawned by the main thread
 importScripts('terrain-tiles.js');
-importScripts('vendor/itm/itm.js');
-importScripts('vendor/itm/itm-wrapper.js');
 
 var TILE_SIZE = self.TerrainTiles.TILE_SIZE;       // 256
 var EARTH_RADIUS = 6378137;
@@ -24,6 +22,7 @@ var CHUNK_SIZE = 64;            // spatial chunk dimension for Phase 3 tile batc
 var COVERAGE_BATCH_SIZE = 500;  // emit coverageBatch every N evaluated cells
 var RX_HEIGHT_M = 2;            // receiver antenna height (handheld)
 var RX_SENSITIVITY_DBW = -140;  // receiver sensitivity in dBW (≈ -110 dBm)
+var WEDGE_DEG = 10;             // degrees per radar sweep wedge
 
 // ===== Tile store =====
 var tileStore = new Map();
@@ -39,6 +38,19 @@ var antennaHeight = 10;
 var radiusM = 30000;
 var freqMHz = 144;
 var txPowerW = 5;
+var unfilteredMode = false;
+var itmEngine = 'wasm';
+var radarSweep = false;
+var adaptiveCulling = false;
+
+// Sweep state machine: IDLE | WEDGE_RUNNING | WAITING_FOR_MAIN
+var sweepState = 'IDLE';
+var sweepWedgeIndex = 0;
+var sweepTotalWedges = 0;
+var sweepTxTileKey = null;  // key of TX tile to preserve across evictions
+var sweepTxTileData = null; // Float32Array of TX tile
+var sweepBitmapOriginGlobalX = 0;
+var sweepBitmapOriginGlobalY = 0;
 
 // Pending tile resolution
 var pendingTileResolve = null;
@@ -50,6 +62,12 @@ self.onmessage = function (e) {
     handleStart(msg);
   } else if (msg.type === 'tiles') {
     handleTiles(msg.tiles);
+  } else if (msg.type === 'wedgeDone') {
+    if (sweepState !== 'WAITING_FOR_MAIN') {
+      console.warn('radio-worker: wedgeDone received in unexpected state:', sweepState);
+      return;
+    }
+    advanceSweep();
   }
 };
 
@@ -197,24 +215,34 @@ function handleStart(msg) {
   mpp = metersPerPixel(txLat, zoom);
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
+  unfilteredMode = msg.unfiltered || false;
+  itmEngine = msg.itmEngine || 'wasm';
+  radarSweep = msg.radarSweep || false;
+  adaptiveCulling = msg.adaptiveCulling || false;
   tileStore.clear();
   tilesUsed = 0;
+  sweepState = 'IDLE';
+  sweepBitmapOriginGlobalX = 0;
+  sweepBitmapOriginGlobalY = 0;
 
   var txTile = getTileCoord(txLat, txLng);
   requestTilesAndRun([txTile], function () {
     txElevation = getElevation(txLat, txLng);
     if (txElevation === null) txElevation = 0;
 
-    runPhase1(function (points) {
-      if (points.length === 0) {
-        self.postMessage({ type: 'done', stats: {
-          tilesUsed: tilesUsed, cellsEvaluated: 0,
-          strongCount: 0, usableCount: 0, marginalCount: 0, maxReachM: 0
-        }});
-        return;
-      }
-      runPhase2(points, function (mask, mw, mh, totalCells) {
-        // Emit coverage bounds for bitmap layer
+    // Cache TX tile for sweep eviction
+    sweepTxTileKey = txTile.z + '/' + txTile.x + '/' + txTile.y;
+    sweepTxTileData = tileStore.get(sweepTxTileKey);
+
+    if (radarSweep) {
+      startSweep();
+    } else {
+      // Skip Phase 1 LOS pre-filter — the ITM propagation model in Phase 3
+      // handles terrain obstruction (diffraction, scattering) directly.
+      // Phase 1's aggressive ray-blocking created false dead zones behind
+      // terrain features that ITM could actually model propagation through.
+      self.postMessage({ type: 'phase1Done', count: 0 });
+      runPhase2Unfiltered(function (mask, mw, mh, totalCells) {
         self.postMessage({
           type: 'coverageBounds',
           minLat: globalPixelYToLat(maskOriginGlobalY + mh),
@@ -226,7 +254,7 @@ function handleStart(msg) {
         });
         runPhase3(mask, mw, mh, totalCells);
       });
-    });
+    }
   });
 }
 
@@ -322,6 +350,47 @@ function runPhase1(callback) {
 }
 
 // ===== Phase 2: Build evaluation mask =====
+
+function runPhase2Unfiltered(callback) {
+  // Build a full circular mask with free-space distance clamping.
+  // The mask covers all cells within the effective radius — no LOS pre-filter.
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var clampRadiusM = Math.min(radiusM, fsMaxM);
+  var wasClamped = fsMaxM < radiusM;
+
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+  var radiusPx = Math.ceil(clampRadiusM / mpp);
+  var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+
+  maskOriginGlobalX = Math.floor(txGX) - radiusPx - bufferPx;
+  maskOriginGlobalY = Math.floor(txGY) - radiusPx - bufferPx;
+  maskW = (radiusPx + bufferPx) * 2 + 1;
+  maskH = (radiusPx + bufferPx) * 2 + 1;
+
+  var mask = new Uint8Array(maskW * maskH);
+  var totalCells = 0;
+
+  for (var py = 0; py < maskH; py++) {
+    for (var px = 0; px < maskW; px++) {
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
+      if (dist <= clampRadiusM) {
+        mask[py * maskW + px] = 1;
+        totalCells++;
+      }
+    }
+  }
+
+  var phase2Msg = { type: 'phase2Done', totalCells: totalCells };
+  if (wasClamped) {
+    phase2Msg.clampedRadiusKm = clampRadiusM / 1000;
+    phase2Msg.wasClamped = true;
+  }
+  self.postMessage(phase2Msg);
+  callback(mask, maskW, maskH, totalCells);
+}
 
 function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
   var marginDb = 10 * Math.log10(txPowerW) + 140;
@@ -446,48 +515,23 @@ function dilateMask(mask, w, h, radius) {
   }
 }
 
-// ===== Phase 3: Partition mask cells and delegate to propagation workers =====
-// Instead of evaluating ITM here, we collect all 1-cells from the mask,
-// partition them by angular slice around the TX, and send them to the main
-// thread which spawns dedicated propagation workers.
-
-var SLICE_COUNT = 4;  // angular partitions (0-90°, 90-180°, 180-270°, 270-360°)
+// ===== Phase 3: Send binary mask to main thread for propagation worker dispatch =====
+// Instead of building object arrays, we transfer the raw Uint8Array mask plus
+// the metadata needed for downstream workers to reconstruct cell coordinates.
 
 function runPhase3(mask, mw, mh, totalCells) {
-  // Compute TX position in mask pixel space
-  var txPxX = lngToGlobalPixelX(txLng) - maskOriginGlobalX;
-  var txPxY = latToGlobalPixelY(txLat) - maskOriginGlobalY;
-
-  // Collect all 1-cells and assign to angular slices
-  var slices = [];
-  for (var s = 0; s < SLICE_COUNT; s++) slices.push([]);
-
-  var sliceAngle = (2 * Math.PI) / SLICE_COUNT;
-
-  for (var py = 0; py < mh; py++) {
-    for (var px = 0; px < mw; px++) {
-      if (!mask[py * mw + px]) continue;
-
-      var dx = px - txPxX;
-      var dy = py - txPxY;
-      var angle = Math.atan2(dy, dx); // -PI to PI
-      if (angle < 0) angle += 2 * Math.PI; // 0 to 2PI
-
-      var sliceIdx = Math.floor(angle / sliceAngle);
-      if (sliceIdx >= SLICE_COUNT) sliceIdx = SLICE_COUNT - 1;
-
-      slices[sliceIdx].push({
-        cellX: px,
-        cellY: py,
-        lat: globalPixelYToLat(maskOriginGlobalY + py),
-        lng: globalPixelXToLng(maskOriginGlobalX + px)
-      });
-    }
-  }
+  // Transfer a copy of the mask so the buffer can be sent zero-copy
+  var maskCopy = new Uint8Array(mask);
 
   self.postMessage({
     type: 'phase3Partition',
-    slices: slices,
+    mask: maskCopy.buffer,
+    maskW: mw,
+    maskH: mh,
+    maskOriginGlobalX: maskOriginGlobalX,
+    maskOriginGlobalY: maskOriginGlobalY,
+    bitmapOffsetX: 0,
+    bitmapOffsetY: 0,
     totalCells: totalCells,
     txParams: {
       txLat: txLat,
@@ -497,8 +541,374 @@ function runPhase3(mask, mw, mh, totalCells) {
       freqMHz: freqMHz,
       txPowerW: txPowerW,
       zoom: zoom,
-      mpp: mpp
+      mpp: mpp,
+      unfiltered: unfilteredMode,
+      itmEngine: itmEngine,
+      adaptiveCulling: adaptiveCulling
     },
     tilesUsed: tilesUsed
+  }, [maskCopy.buffer]);
+}
+
+// ===== Radar Sweep State Machine =====
+
+function startSweep() {
+  sweepTotalWedges = Math.ceil(360 / WEDGE_DEG);
+  sweepWedgeIndex = 0;
+
+  // Send full-circle coverage bounds once so the main thread can init the canvas
+  var radiusPx = Math.ceil(radiusM / mpp);
+  var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+  var fullMinGX = Math.floor(txGX) - radiusPx - bufferPx;
+  var fullMinGY = Math.floor(txGY) - radiusPx - bufferPx;
+  var fullW = (radiusPx + bufferPx) * 2 + 1;
+  var fullH = (radiusPx + bufferPx) * 2 + 1;
+
+  sweepBitmapOriginGlobalX = fullMinGX;
+  sweepBitmapOriginGlobalY = fullMinGY;
+
+  self.postMessage({
+    type: 'coverageBounds',
+    minLat: globalPixelYToLat(fullMinGY + fullH),
+    maxLat: globalPixelYToLat(fullMinGY),
+    minLng: globalPixelXToLng(fullMinGX),
+    maxLng: globalPixelXToLng(fullMinGX + fullW),
+    widthPx: fullW,
+    heightPx: fullH
   });
+
+  self.postMessage({ type: 'phase1Done', count: 0 });
+  processWedge();
+}
+
+function evictTilesForWedge() {
+  // Clear all tiles except the TX tile
+  tileStore.clear();
+  if (sweepTxTileKey && sweepTxTileData) {
+    tileStore.set(sweepTxTileKey, sweepTxTileData);
+  }
+  tilesUsed = 1;
+}
+
+function processWedge() {
+  if (sweepWedgeIndex >= sweepTotalWedges) {
+    // All wedges done
+    self.postMessage({ type: 'done', stats: {
+      tilesUsed: tilesUsed, cellsEvaluated: 0,
+      strongCount: 0, usableCount: 0, marginalCount: 0, maxReachM: 0
+    }});
+    sweepState = 'IDLE';
+    return;
+  }
+
+  sweepState = 'WEDGE_RUNNING';
+  evictTilesForWedge();
+
+  var startDeg = sweepWedgeIndex * WEDGE_DEG;
+  var endDeg = Math.min(startDeg + WEDGE_DEG, 360);
+
+  // Always use unfiltered wedge mask — Phase 1 LOS ray-blocking is too
+  // aggressive and creates dead zones behind terrain. ITM in Phase 3
+  // handles diffraction/obstruction modeling directly.
+  buildWedgeMaskUnfiltered(startDeg, endDeg, function (mask, mw, mh, totalCells) {
+    sendWedgePartition(mask, mw, mh, totalCells);
+  });
+}
+
+function sendWedgePartition(mask, mw, mh, totalCells) {
+  var maskCopy = new Uint8Array(mask);
+  self.postMessage({
+    type: 'phase3Partition',
+    mask: maskCopy.buffer,
+    maskW: mw,
+    maskH: mh,
+    maskOriginGlobalX: maskOriginGlobalX,
+    maskOriginGlobalY: maskOriginGlobalY,
+    bitmapOffsetX: maskOriginGlobalX - sweepBitmapOriginGlobalX,
+    bitmapOffsetY: maskOriginGlobalY - sweepBitmapOriginGlobalY,
+    totalCells: totalCells,
+    wedgeIndex: sweepWedgeIndex,
+    totalWedges: sweepTotalWedges,
+    isRadarSweep: true,
+    txParams: {
+      txLat: txLat,
+      txLng: txLng,
+      txElevation: txElevation,
+      antennaHeight: antennaHeight,
+      freqMHz: freqMHz,
+      txPowerW: txPowerW,
+      zoom: zoom,
+      mpp: mpp,
+      unfiltered: unfilteredMode,
+      itmEngine: itmEngine,
+      adaptiveCulling: adaptiveCulling
+    },
+    tilesUsed: tilesUsed
+  }, [maskCopy.buffer]);
+
+  sweepState = 'WAITING_FOR_MAIN';
+}
+
+function advanceSweep() {
+  sweepWedgeIndex++;
+  self.postMessage({
+    type: 'phase2Done',
+    totalCells: 0,
+    wedgeIndex: sweepWedgeIndex,
+    totalWedges: sweepTotalWedges
+  });
+  processWedge();
+}
+
+// ===== Phase 1 for a single wedge (subset of rays) =====
+function runPhase1Wedge(startDeg, endDeg, callback) {
+  var stepM = mpp;
+  var maxSteps = Math.ceil(radiusM / stepM);
+
+  var rays = [];
+  for (var a = startDeg; a < endDeg; a++) {
+    rays.push({ azimuth: a, step: 0, blocked: false, done: false });
+  }
+
+  var completedRays = 0;
+  var totalRays = rays.length;
+  var reachablePoints = [];
+
+  function processBatch() {
+    var neededTiles = [];
+    var neededSet = {};
+
+    for (var i = 0; i < rays.length; i++) {
+      var ray = rays[i];
+      if (ray.done) continue;
+      if (ray.blocked || ray.step >= maxSteps) {
+        ray.done = true;
+        completedRays++;
+        continue;
+      }
+
+      var stepsThisBatch = 0;
+      var rayNeedsTile = false;
+      while (ray.step < maxSteps && !ray.blocked && stepsThisBatch < 200) {
+        ray.step++;
+        stepsThisBatch++;
+        var distM = ray.step * stepM;
+        var pt = destinationPoint(txLat, txLng, ray.azimuth, distM);
+
+        if (!hasTile(pt.lat, pt.lng)) {
+          var tc = getTileCoord(pt.lat, pt.lng);
+          var key = tc.z + '/' + tc.x + '/' + tc.y;
+          if (!neededSet[key]) {
+            neededSet[key] = true;
+            neededTiles.push(tc);
+          }
+          ray.step--;
+          rayNeedsTile = true;
+          break;
+        }
+
+        var terrainElev = getElevation(pt.lat, pt.lng);
+        if (terrainElev === null) {
+          ray.blocked = true;
+          break;
+        }
+
+        var earthCurve = (distM * distM) / (2 * K_REFRACTION * EARTH_RADIUS);
+        var rayAlt = txElevation + antennaHeight - earthCurve;
+
+        if (terrainElev > rayAlt + LOS_BLOCK_MARGIN) {
+          ray.blocked = true;
+          break;
+        }
+
+        reachablePoints.push({ lat: pt.lat, lng: pt.lng });
+      }
+
+      if (!rayNeedsTile && (ray.blocked || ray.step >= maxSteps) && !ray.done) {
+        ray.done = true;
+        completedRays++;
+      }
+    }
+
+    if (completedRays >= totalRays) {
+      callback(reachablePoints);
+      return;
+    }
+
+    if (neededTiles.length > 0) {
+      requestTilesAndRun(neededTiles, processBatch);
+    } else {
+      setTimeout(processBatch, 0);
+    }
+  }
+
+  processBatch();
+}
+
+// ===== Wedge mask builder (unfiltered — adaptive culling path) =====
+function buildWedgeMaskUnfiltered(startDeg, endDeg, callback) {
+  var toRad = Math.PI / 180;
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+
+  // Compute bbox from TX + two edge rays
+  var pt1 = destinationPoint(txLat, txLng, startDeg, radiusM);
+  var pt2 = destinationPoint(txLat, txLng, endDeg, radiusM);
+
+  var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+  var allGX = [txGX, lngToGlobalPixelX(pt1.lng), lngToGlobalPixelX(pt2.lng)];
+  var allGY = [txGY, latToGlobalPixelY(pt1.lat), latToGlobalPixelY(pt2.lat)];
+
+  // For wide wedges, sample intermediate rays to ensure bbox captures the arc
+  for (var a = startDeg + 1; a < endDeg; a++) {
+    var ptMid = destinationPoint(txLat, txLng, a, radiusM);
+    allGX.push(lngToGlobalPixelX(ptMid.lng));
+    allGY.push(latToGlobalPixelY(ptMid.lat));
+  }
+
+  var minGX = Infinity, maxGX = -Infinity;
+  var minGY = Infinity, maxGY = -Infinity;
+  for (var i = 0; i < allGX.length; i++) {
+    if (allGX[i] < minGX) minGX = allGX[i];
+    if (allGX[i] > maxGX) maxGX = allGX[i];
+    if (allGY[i] < minGY) minGY = allGY[i];
+    if (allGY[i] > maxGY) maxGY = allGY[i];
+  }
+
+  minGX = Math.floor(minGX) - bufferPx;
+  maxGX = Math.ceil(maxGX) + bufferPx;
+  minGY = Math.floor(minGY) - bufferPx;
+  maxGY = Math.ceil(maxGY) + bufferPx;
+
+  maskOriginGlobalX = minGX;
+  maskOriginGlobalY = minGY;
+  maskW = maxGX - minGX + 1;
+  maskH = maxGY - minGY + 1;
+
+  var mask = new Uint8Array(maskW * maskH);
+  var totalCells = 0;
+
+  for (var py = 0; py < maskH; py++) {
+    var rowHasCell = false;
+    var pastRadius = false;
+    for (var px = 0; px < maskW; px++) {
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
+
+      // Early-out: once past radius on this row (after we've seen in-radius cells), skip rest
+      if (dist > radiusM) {
+        if (rowHasCell) { pastRadius = true; break; }
+        continue;
+      }
+
+      // Check bearing within wedge
+      var bearing = bearingFromTx(cellLat, cellLng);
+      if (!isInWedge(bearing, startDeg, endDeg)) continue;
+
+      mask[py * maskW + px] = 1;
+      totalCells++;
+      rowHasCell = true;
+    }
+  }
+
+  callback(mask, maskW, maskH, totalCells);
+}
+
+// ===== Wedge mask builder (LOS-based — non-adaptive path) =====
+function buildWedgeMaskFromPoints(points, startDeg, endDeg, callback) {
+  var bufferPx = Math.ceil((BUFFER_KM * 1000) / mpp);
+  var txGX = lngToGlobalPixelX(txLng);
+  var txGY = latToGlobalPixelY(txLat);
+
+  var minGX = txGX, maxGX = txGX;
+  var minGY = txGY, maxGY = txGY;
+
+  for (var i = 0; i < points.length; i++) {
+    var gx = lngToGlobalPixelX(points[i].lng);
+    var gy = latToGlobalPixelY(points[i].lat);
+    if (gx < minGX) minGX = gx;
+    if (gx > maxGX) maxGX = gx;
+    if (gy < minGY) minGY = gy;
+    if (gy > maxGY) maxGY = gy;
+  }
+
+  minGX = Math.floor(minGX) - bufferPx;
+  maxGX = Math.ceil(maxGX) + bufferPx;
+  minGY = Math.floor(minGY) - bufferPx;
+  maxGY = Math.ceil(maxGY) + bufferPx;
+
+  // Clamp to free-space max distance
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var clampRadiusM = Math.min(radiusM, fsMaxM);
+  var clampPx = Math.ceil(clampRadiusM / mpp) + bufferPx;
+  minGX = Math.max(minGX, Math.floor(txGX) - clampPx);
+  maxGX = Math.min(maxGX, Math.ceil(txGX) + clampPx);
+  minGY = Math.max(minGY, Math.floor(txGY) - clampPx);
+  maxGY = Math.min(maxGY, Math.ceil(txGY) + clampPx);
+
+  maskOriginGlobalX = minGX;
+  maskOriginGlobalY = minGY;
+  maskW = maxGX - minGX + 1;
+  maskH = maxGY - minGY + 1;
+
+  var mask = new Uint8Array(maskW * maskH);
+
+  // Project reachable points into mask
+  for (var i = 0; i < points.length; i++) {
+    var gx = Math.round(lngToGlobalPixelX(points[i].lng)) - maskOriginGlobalX;
+    var gy = Math.round(latToGlobalPixelY(points[i].lat)) - maskOriginGlobalY;
+    if (gx >= 0 && gx < maskW && gy >= 0 && gy < maskH) {
+      mask[gy * maskW + gx] = 1;
+    }
+  }
+
+  // Dilate
+  dilateMask(mask, maskW, maskH, bufferPx);
+
+  // Clip to wedge arc and clamp radius
+  var totalCells = 0;
+  for (var py = 0; py < maskH; py++) {
+    for (var px = 0; px < maskW; px++) {
+      if (!mask[py * maskW + px]) continue;
+      var cellLat = globalPixelYToLat(maskOriginGlobalY + py);
+      var cellLng = globalPixelXToLng(maskOriginGlobalX + px);
+      var dist = haversineDistance(txLat, txLng, cellLat, cellLng);
+      if (dist > clampRadiusM) {
+        mask[py * maskW + px] = 0;
+        continue;
+      }
+      var bearing = bearingFromTx(cellLat, cellLng);
+      if (!isInWedge(bearing, startDeg, endDeg)) {
+        mask[py * maskW + px] = 0;
+        continue;
+      }
+      totalCells++;
+    }
+  }
+
+  callback(mask, maskW, maskH, totalCells);
+}
+
+// ===== Bearing and wedge geometry helpers =====
+function bearingFromTx(lat, lng) {
+  var toRad = Math.PI / 180;
+  var toDeg = 180 / Math.PI;
+  var dLng = (lng - txLng) * toRad;
+  var lat1 = txLat * toRad;
+  var lat2 = lat * toRad;
+  var y = Math.sin(dLng) * Math.cos(lat2);
+  var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  var brng = Math.atan2(y, x) * toDeg;
+  return (brng + 360) % 360;
+}
+
+function isInWedge(bearing, startDeg, endDeg) {
+  // Handle wrap-around (e.g., startDeg=350, endDeg=360)
+  if (endDeg > 360) {
+    return bearing >= startDeg || bearing < (endDeg - 360);
+  }
+  return bearing >= startDeg && bearing < endDeg;
 }

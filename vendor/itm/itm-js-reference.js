@@ -1,4 +1,7 @@
 /**
+ * REFERENCE IMPLEMENTATION FOR VALIDATION ONLY — NOT LOADED AT RUNTIME.
+ * The WASM build (itm-glue.wasm) is the sole runtime backend.
+ *
  * NTIA Irregular Terrain Model (ITM) — Point-to-Point Mode
  *
  * Source:     Ported from NTIA/itm C++ reference (https://github.com/NTIA/itm), v1.4

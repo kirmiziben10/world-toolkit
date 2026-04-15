@@ -4,7 +4,8 @@
 // Tile data is fetched via the main thread proxy (same protocol as the
 // orchestrator worker).
 importScripts('terrain-tiles.js');
-importScripts('vendor/itm/itm.js');
+importScripts('vendor/itm/itm-glue.js');
+importScripts('vendor/itm/itm-loader.js');
 importScripts('vendor/itm/itm-wrapper.js');
 
 var TILE_SIZE = self.TerrainTiles.TILE_SIZE;       // 256
@@ -14,6 +15,9 @@ var CHUNK_SIZE = 64;
 var COVERAGE_BATCH_SIZE = 500;
 var RX_HEIGHT_M = 2;
 var RX_SENSITIVITY_DBW = -140;
+var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
+var ADAPTIVE_FILL_MARGIN_DB = 28;
+var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
 
 var metersPerPixel = self.TerrainTiles.metersPerPixel;
 var lngToTileX = self.TerrainTiles.lngToTileX;
@@ -34,6 +38,9 @@ var antennaHeight = 10;
 var freqMHz = 144;
 var txPowerW = 5;
 var sliceId = 0;
+var adaptiveCulling = false;
+var bitmapOffsetX = 0;
+var bitmapOffsetY = 0;
 
 // ===== Message handler =====
 var startQueue = [];
@@ -138,11 +145,21 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+var MAX_PROFILE_SAMPLES = 2048;
+
+function freeSpacePathLossDb(distM, freqMHz) {
+  var safeDistKm = Math.max(distM, 1) / 1000;
+  return 32.45 + 20 * Math.log10(freqMHz) + 20 * Math.log10(safeDistKm);
+}
+
 function buildProfile(lat1, lng1, lat2, lng2) {
   var distM = haversineDistance(lat1, lng1, lat2, lng2);
   if (distM < mpp) return null;
 
   var nSamples = Math.max(2, Math.round(distM / mpp));
+  // Cap at WASM PFL buffer limit — resample at coarser spacing for long paths
+  if (nSamples > MAX_PROFILE_SAMPLES) nSamples = MAX_PROFILE_SAMPLES;
+  var spacingM = distM / (nSamples - 1);
   var profile = new Float32Array(nSamples);
 
   for (var i = 0; i < nSamples; i++) {
@@ -154,13 +171,41 @@ function buildProfile(lat1, lng1, lat2, lng2) {
     profile[i] = elev;
   }
 
-  return profile;
+  return { profile: profile, spacingM: spacingM };
+}
+
+// ===== Mask-to-geo coordinate helpers =====
+var maskOriginGlobalX = 0;
+var maskOriginGlobalY = 0;
+
+function globalPixelYToLat(gpy) {
+  var n = Math.pow(2, zoom);
+  var yFrac = gpy / (n * TILE_SIZE);
+  var nVal = Math.PI - 2 * Math.PI * yFrac;
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(nVal) - Math.exp(-nVal)));
+}
+
+function globalPixelXToLng(gpx) {
+  var n = Math.pow(2, zoom);
+  return (gpx / (n * TILE_SIZE)) * 360 - 180;
+}
+
+function latToGlobalPixelY(lat) {
+  var latRad = lat * Math.PI / 180;
+  var n = Math.pow(2, zoom);
+  var yFrac = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+  return yFrac * TILE_SIZE;
+}
+
+function lngToGlobalPixelX(lng) {
+  var n = Math.pow(2, zoom);
+  return ((lng + 180) / 360) * n * TILE_SIZE;
 }
 
 function collectChunkTiles(cells, startIdx, endIdx) {
-  // Find bbox of chunk cells + TX
-  var minLat = txLat, maxLat = txLat;
-  var minLng = txLng, maxLng = txLng;
+  // Find bbox of chunk cells for direct chunk-tile inclusion
+  var minLat = Infinity, maxLat = -Infinity;
+  var minLng = Infinity, maxLng = -Infinity;
 
   for (var i = startIdx; i < endIdx; i++) {
     var c = cells[i];
@@ -170,23 +215,153 @@ function collectChunkTiles(cells, startIdx, endIdx) {
     if (c.lng > maxLng) maxLng = c.lng;
   }
 
-  var txMin = lngToTileX(minLng, zoom);
-  var txMax = lngToTileX(maxLng, zoom);
-  var tyMin = latToTileY(maxLat, zoom);
-  var tyMax = latToTileY(minLat, zoom);
-
+  var seen = {};
   var tiles = [];
-  for (var ty = tyMin; ty <= tyMax; ty++) {
-    for (var tx = txMin; tx <= txMax; tx++) {
-      tiles.push({ z: zoom, x: tx, y: ty });
+
+  function addTile(tz, tx, ty) {
+    var key = tz + '/' + tx + '/' + ty;
+    if (!seen[key]) {
+      seen[key] = true;
+      tiles.push({ z: tz, x: tx, y: ty });
     }
   }
+
+  // Collect tiles along a ray from TX to a target point using Bresenham-style stepping
+  function traceRayTiles(toLat, toLng) {
+    var startGX = lngToGlobalPixelX(txLng);
+    var startGY = latToGlobalPixelY(txLat);
+    var endGX = lngToGlobalPixelX(toLng);
+    var endGY = latToGlobalPixelY(toLat);
+    var deltaGX = endGX - startGX;
+    var deltaGY = endGY - startGY;
+    var stepPx = TILE_SIZE * 0.5;
+    var nSteps = Math.max(2, Math.ceil(Math.max(Math.abs(deltaGX), Math.abs(deltaGY)) / stepPx));
+
+    for (var i = 0; i <= nSteps; i++) {
+      var frac = i / nSteps;
+      var gpx = startGX + deltaGX * frac;
+      var gpy = startGY + deltaGY * frac;
+      addTile(zoom, Math.floor(gpx / TILE_SIZE), Math.floor(gpy / TILE_SIZE));
+    }
+  }
+
+  // Trace rays from TX to every cell in the chunk
+  for (var i = startIdx; i < endIdx; i++) {
+    traceRayTiles(cells[i].lat, cells[i].lng);
+  }
+
+  // Also include the chunk's own tiles directly (cells need their own tile data)
+  var chunkTxMin = lngToTileX(minLng, zoom);
+  var chunkTxMax = lngToTileX(maxLng, zoom);
+  var chunkTyMin = latToTileY(maxLat, zoom);
+  var chunkTyMax = latToTileY(minLat, zoom);
+  for (var ty = chunkTyMin; ty <= chunkTyMax; ty++) {
+    for (var tx = chunkTxMin; tx <= chunkTxMax; tx++) {
+      addTile(zoom, tx, ty);
+    }
+  }
+
   return tiles;
 }
+
+// ===== WASM init state =====
+var wasmReady = false;
+var wasmInitPromise = null;
+
+function ensureWasmReady() {
+  if (wasmReady) return Promise.resolve();
+  if (wasmInitPromise) return wasmInitPromise;
+  wasmInitPromise = self.initITM().then(function () {
+    wasmReady = true;
+  });
+  return wasmInitPromise;
+}
+
+// ===== JS fallback init state =====
+var jsReady = false;
+var jsComputeFn = null;
+
+function ensureJSReady() {
+  if (jsReady) return Promise.resolve();
+  return new Promise(function (resolve, reject) {
+    try {
+      importScripts('vendor/itm/itm-js-reference.js');
+    } catch (e) {
+      reject(new Error('Failed to load JS ITM reference: ' + e.message));
+      return;
+    }
+    if (!self.ITM || typeof self.ITM.ITM_P2P_TLS !== 'function') {
+      reject(new Error('JS ITM reference loaded but ITM.ITM_P2P_TLS not found'));
+      return;
+    }
+
+    // Hardcoded params matching the WASM loader
+    var CLIMATE   = 5;
+    var N_0       = 301;
+    var POL       = 1;
+    var EPSILON   = 15;
+    var SIGMA     = 0.008;
+    var MDVAR     = 12;
+    var TIME      = 50;
+    var LOCATION  = 50;
+    var SITUATION = 50;
+
+    var itmRef = self.ITM;
+
+    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+      var nSamples = profile.length;
+      var N = nSamples - 1;
+      // Build PFL array: [N, spacingM, elev0, ..., elevN]
+      var pfl = new Array(nSamples + 2);
+      pfl[0] = N;
+      pfl[1] = spacingM;
+      for (var i = 0; i < nSamples; i++) {
+        pfl[2 + i] = profile[i];
+      }
+
+      var result = itmRef.ITM_P2P_TLS(
+        txHeightM, rxHeightM, pfl,
+        CLIMATE, N_0, freqMHz,
+        POL, EPSILON, SIGMA,
+        MDVAR, TIME, LOCATION, SITUATION
+      );
+
+      if (result.error >= 1000) {
+        throw new Error('ITM JS error ' + result.error + ' (warnings: 0x' + result.warnings.toString(16) + ')');
+      }
+      return result.A__db;
+    };
+
+    jsReady = true;
+    resolve();
+  });
+}
+
+// ===== Active engine selection =====
+var activeEngine = 'wasm';  // 'wasm' or 'js'
 
 // ===== Entry point =====
 
 function handleStart(msg) {
+  activeEngine = msg.itmEngine || 'wasm';
+
+  var initPromise;
+  if (activeEngine === 'js') {
+    initPromise = ensureJSReady();
+  } else {
+    initPromise = ensureWasmReady();
+  }
+
+  initPromise.then(function () {
+    handleStartInner(msg);
+  }).catch(function (err) {
+    var errType = activeEngine === 'js' ? 'JS_INIT_FAILED' : 'WASM_INIT_FAILED';
+    self.postMessage({ type: 'error', message: errType, detail: err.message || String(err) });
+    onSliceFinished();
+  });
+}
+
+function handleStartInner(msg) {
   txLat = msg.txLat;
   txLng = msg.txLng;
   txElevation = msg.txElevation;
@@ -196,12 +371,34 @@ function handleStart(msg) {
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
+  adaptiveCulling = msg.adaptiveCulling || false;
+  maskOriginGlobalX = msg.maskOriginGlobalX;
+  maskOriginGlobalY = msg.maskOriginGlobalY;
+  bitmapOffsetX = msg.bitmapOffsetX || 0;
+  bitmapOffsetY = msg.bitmapOffsetY || 0;
 
-  var cells = msg.cells;
+  // Decode binary mask slice into cell list
+  var mask = new Uint8Array(msg.mask);
+  var maskW = msg.maskW;
+  var rowOffset = msg.rowOffset;
+  var rows = msg.rows;
+  var cells = [];
+  for (var ry = 0; ry < rows; ry++) {
+    var globalCellY = rowOffset + ry;
+    for (var px = 0; px < maskW; px++) {
+      if (!mask[ry * maskW + px]) continue;
+      cells.push({
+        cellX: px + bitmapOffsetX,
+        cellY: globalCellY + bitmapOffsetY,
+        lat: globalPixelYToLat(maskOriginGlobalY + globalCellY + 0.5),
+        lng: globalPixelXToLng(maskOriginGlobalX + px + 0.5)
+      });
+    }
+  }
+
   var totalCells = cells.length;
 
-  // Track tiles-used per slice (don't clear cache between slices on same worker)
-  tilesUsed = 0;
+  // Tile limit is cumulative across all slices on this worker — do not reset tilesUsed
 
   // Ensure TX tile is loaded first
   var txTile = getTileCoord(txLat, txLng);
@@ -219,12 +416,68 @@ function processSlice(cells, totalCells) {
   var rxGainDbi = 0;
 
   var evaluated = 0;
-  var batchCells = [];
+  // Binary batch buffer: Float32Array triples [fullBitmapX, fullBitmapY, band, ...]
+  var batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
+  var batchCount = 0;
   var strongCount = 0, usableCount = 0, marginalCount = 0;
   var maxReachM = 0;
 
+  function flushBatch(progress) {
+    if (batchCount === 0) return;
+    var slice = batchBuf.slice(0, batchCount * 3);
+    self.postMessage({
+      type: 'coverageBatch',
+      sliceId: sliceId,
+      cells: slice.buffer,
+      progress: progress,
+      evaluated: evaluated
+    }, [slice.buffer]);
+    batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
+    batchCount = 0;
+  }
+
+  function emitCell(cell, band) {
+    var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    if (distM > maxReachM) maxReachM = distM;
+
+    if (band === 0) strongCount++;
+    else if (band === 1) usableCount++;
+    else marginalCount++;
+
+    var bi = batchCount * 3;
+    batchBuf[bi]     = cell.cellX;
+    batchBuf[bi + 1] = cell.cellY;
+    batchBuf[bi + 2] = band;
+    batchCount++;
+
+    if (batchCount >= COVERAGE_BATCH_SIZE) {
+      flushBatch(evaluated / totalCells);
+    }
+  }
+
+  function evaluateCell(cell) {
+    var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    if (distM < mpp) {
+      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - RX_SENSITIVITY_DBW;
+    }
+
+    var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
+    if (!result) return -Infinity;
+
+    var pathLoss;
+    try {
+      var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
+      pathLoss = computeFn(
+        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
+      );
+    } catch (e) {
+      return -Infinity;
+    }
+
+    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
+  }
+
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.
-  // Group by (cellX >> 6, cellY >> 6) to match CHUNK_SIZE = 64.
   var chunkMap = {};
   for (var i = 0; i < cells.length; i++) {
     var c = cells[i];
@@ -232,24 +485,36 @@ function processSlice(cells, totalCells) {
     if (!chunkMap[ck]) chunkMap[ck] = [];
     chunkMap[ck].push(c);
   }
-  var chunkKeys = Object.keys(chunkMap);
+  var chunkKeys = Object.keys(chunkMap).map(function (key) {
+    var chunk = chunkMap[key];
+    var sumLat = 0;
+    var sumLng = 0;
+    for (var ci = 0; ci < chunk.length; ci++) {
+      sumLat += chunk[ci].lat;
+      sumLng += chunk[ci].lng;
+    }
+    var centerLat = sumLat / chunk.length;
+    var centerLng = sumLng / chunk.length;
+    var angle = Math.atan2(centerLat - txLat, centerLng - txLng);
+    return {
+      key: key,
+      dist: haversineDistance(txLat, txLng, centerLat, centerLng),
+      angle: angle
+    };
+  }).sort(function (a, b) {
+    if (a.dist !== b.dist) return a.dist - b.dist;
+    return a.angle - b.angle;
+  });
   var chunkIndex = 0;
 
   function processNextChunk() {
     if (chunkIndex >= chunkKeys.length) {
       // Flush remaining batch
-      if (batchCells.length > 0) {
-        self.postMessage({
-          type: 'coverageBatch',
-          sliceId: sliceId,
-          cells: batchCells,
-          progress: 1.0,
-          evaluated: evaluated
-        });
-      }
+      flushBatch(1.0);
       self.postMessage({
         type: 'sliceDone',
         sliceId: sliceId,
+        itmBackend: activeEngine,
         stats: {
           evaluated: evaluated,
           reachable: strongCount + usableCount + marginalCount,
@@ -264,56 +529,173 @@ function processSlice(cells, totalCells) {
       return;
     }
 
-    var chunk = chunkMap[chunkKeys[chunkIndex]];
+    var chunk = chunkMap[chunkKeys[chunkIndex].key];
     chunkIndex++;
 
     // Collect tiles needed for this chunk
     var neededTiles = collectChunkTiles(chunk, 0, chunk.length);
 
     requestTilesAndRun(neededTiles, function () {
-      for (var ci = 0; ci < chunk.length; ci++) {
-        var cell = chunk[ci];
+      if (adaptiveCulling) {
+        processChunkCoarseToFine(chunk);
+      } else {
+        processChunkStandard(chunk);
+      }
+      setTimeout(processNextChunk, 0);
+    });
+  }
 
-        var profile = buildProfile(txLat, txLng, cell.lat, cell.lng);
-        if (!profile) continue;
+  // ===== Standard 1:1 per-cell evaluation =====
+  function processChunkStandard(chunk) {
+    for (var ci = 0; ci < chunk.length; ci++) {
+      var cell = chunk[ci];
+      evaluated++;
 
-        var pathLoss;
-        try {
-          pathLoss = self.computeITMPathLoss(
-            profile, mpp, antennaHeight, RX_HEIGHT_M, freqMHz
-          );
-        } catch (e) {
+      var margin = evaluateCell(cell);
+      if (margin === -Infinity) continue;
+
+      var band;
+      if (margin > 20)      band = 0;
+      else if (margin >= 5) band = 1;
+      else if (margin >= 0) band = 2;
+      else continue;
+
+      emitCell(cell, band);
+    }
+  }
+
+  // ===== Coarse-to-fine 2-pass evaluation =====
+  function processChunkCoarseToFine(chunk) {
+    // Sub-group cells into 4x4 blocks within this chunk
+    var blockMap = {};
+    for (var ci = 0; ci < chunk.length; ci++) {
+      var cell = chunk[ci];
+      var bk = (cell.cellX >> CULL_BLOCK_SHIFT) + ',' + (cell.cellY >> CULL_BLOCK_SHIFT);
+      if (!blockMap[bk]) blockMap[bk] = [];
+      blockMap[bk].push(cell);
+    }
+
+    var blockKeys = Object.keys(blockMap);
+    for (var bi = 0; bi < blockKeys.length; bi++) {
+      var block = blockMap[blockKeys[bi]];
+
+      var scoutPlan = buildAdaptiveScoutPlan(block);
+      var scoutMargins = [];
+      var scoutBands = [];
+      var allDead = true;
+      var fillBand = -1;
+
+      for (var si = 0; si < scoutPlan.scouts.length; si++) {
+        var scoutCell = scoutPlan.scouts[si];
+        evaluated++;
+
+        var scoutMargin = evaluateCell(scoutCell);
+        scoutMargins.push(scoutMargin);
+
+        if (scoutMargin === -Infinity || scoutMargin < 0) continue;
+
+        allDead = false;
+        var scoutBand = marginToBand(scoutMargin);
+        scoutBands.push(scoutBand);
+        emitCell(scoutCell, scoutBand);
+      }
+
+      if (allDead) {
+        evaluated += block.length - scoutPlan.scouts.length;
+        continue;
+      }
+
+      if (
+        scoutBands.length === scoutPlan.scouts.length &&
+        scoutPlan.elevSpan <= ADAPTIVE_FILL_ELEV_SPAN_M &&
+        minArrayValue(scoutMargins) >= ADAPTIVE_FILL_MARGIN_DB
+      ) {
+        fillBand = scoutBands[0];
+      }
+
+      for (var j = 0; j < block.length; j++) {
+        var blockCell = block[j];
+        if (blockCell._adaptiveScout) continue;
+
+        if (fillBand !== -1) {
+          evaluated++;
+          emitCell(blockCell, fillBand);
           continue;
         }
 
-        var margin = txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
-
-        var band;
-        if (margin > 20)      { band = 0; strongCount++; }
-        else if (margin >= 5) { band = 1; usableCount++; }
-        else if (margin >= 0) { band = 2; marginalCount++; }
-        else continue;
-
-        var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
-        if (distM > maxReachM) maxReachM = distM;
-
         evaluated++;
-        batchCells.push({ cellX: cell.cellX, cellY: cell.cellY, band: band });
 
-        if (batchCells.length >= COVERAGE_BATCH_SIZE) {
-          self.postMessage({
-            type: 'coverageBatch',
-            sliceId: sliceId,
-            cells: batchCells,
-            progress: evaluated / totalCells,
-            evaluated: evaluated
-          });
-          batchCells = [];
-        }
+        var margin = evaluateCell(blockCell);
+        if (margin === -Infinity || margin < 0) continue;
+        emitCell(blockCell, marginToBand(margin));
       }
 
-      setTimeout(processNextChunk, 0);
-    });
+      for (var ck = 0; ck < scoutPlan.scouts.length; ck++) {
+        scoutPlan.scouts[ck]._adaptiveScout = false;
+      }
+    }
+  }
+
+  function buildAdaptiveScoutPlan(block) {
+    var highestCell = block[0];
+    var closestCell = block[0];
+    var centerCell = block[Math.floor(block.length / 2)];
+    var maxElev = -Infinity;
+    var minElev = Infinity;
+    var minDist = Infinity;
+
+    for (var i = 0; i < block.length; i++) {
+      var cell = block[i];
+      if (cell.elev === undefined) cell.elev = getElevation(cell.lat, cell.lng);
+      var elev = cell.elev;
+      if (elev !== null) {
+        if (elev > maxElev) {
+          maxElev = elev;
+          highestCell = cell;
+        }
+        if (elev < minElev) minElev = elev;
+      }
+
+      if (cell.distM === undefined) cell.distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+      if (cell.distM < minDist) {
+        minDist = cell.distM;
+        closestCell = cell;
+      }
+    }
+
+    var scouts = [];
+    var scoutSeen = new Set();
+    addAdaptiveScout(scouts, scoutSeen, closestCell);
+    addAdaptiveScout(scouts, scoutSeen, centerCell);
+    addAdaptiveScout(scouts, scoutSeen, highestCell);
+
+    return {
+      scouts: scouts,
+      elevSpan: (maxElev === -Infinity || minElev === Infinity) ? Infinity : maxElev - minElev
+    };
+  }
+
+  function addAdaptiveScout(list, seen, cell) {
+    if (!cell) return;
+    var key = cell.cellX + ',' + cell.cellY;
+    if (seen.has(key)) return;
+    seen.add(key);
+    cell._adaptiveScout = true;
+    list.push(cell);
+  }
+
+  function marginToBand(margin) {
+    if (margin > 20) return 0;
+    if (margin >= 5) return 1;
+    return 2;
+  }
+
+  function minArrayValue(values) {
+    var min = Infinity;
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] < min) min = values[i];
+    }
+    return min;
   }
 
   processNextChunk();
