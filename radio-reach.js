@@ -206,6 +206,10 @@
     var radiusKm = clampNumber(radiusInput.value, 5, 1000, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
     var freqMHz = parseFloat(frequencySelect.value);
+    var unfiltered = !!(unfilteredCheck && unfilteredCheck.checked);
+    var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
+    var adaptiveCulling = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
+    var itmEngine = itmEngineSelect ? itmEngineSelect.value : 'wasm';
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
     var analysisZoom;
     if (resVal === 'auto') {
@@ -219,7 +223,7 @@
 
     // Memory guardrail: abort if full-circle mask would exceed MAX_MASK_MB
     // and radar sweep is not enabled to break the work into wedges
-    if (!radarSweepCheck.checked) {
+    if (!radarSweep) {
       var mppGuard = metersPerPixel(radioState.lat, analysisZoom);
       var pixelRadius = (radiusKm * 1000) / mppGuard;
       var diameter = pixelRadius * 2;
@@ -287,10 +291,10 @@
       zoom: analysisZoom,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
-      unfiltered: unfilteredCheck.checked,
-      itmEngine: itmEngineSelect.value,
-      radarSweep: radarSweepCheck.checked,
-      adaptiveCulling: adaptiveCullingCheck.checked,
+      unfiltered: unfiltered,
+      itmEngine: itmEngine,
+      radarSweep: radarSweep,
+      adaptiveCulling: adaptiveCulling,
     });
   }
 
