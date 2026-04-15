@@ -207,25 +207,15 @@ function collectChunkTiles(cells, startIdx, endIdx) {
 
   // Collect tiles along a ray from TX to a target point using Bresenham-style stepping
   function traceRayTiles(toLat, toLng) {
-    var x0 = lngToTileX(txLng, zoom);
-    var y0 = latToTileY(txLat, zoom);
-    var x1 = lngToTileX(toLng, zoom);
-    var y1 = latToTileY(toLat, zoom);
-    addTile(zoom, x0, y0);
-    addTile(zoom, x1, y1);
-
-    var dx = Math.abs(x1 - x0);
-    var dy = Math.abs(y1 - y0);
-    var sx = x0 < x1 ? 1 : -1;
-    var sy = y0 < y1 ? 1 : -1;
-    var err = dx - dy;
-
-    var cx = x0, cy = y0;
-    while (cx !== x1 || cy !== y1) {
-      var e2 = 2 * err;
-      if (e2 > -dy) { err -= dy; cx += sx; }
-      if (e2 < dx)  { err += dx; cy += sy; }
-      addTile(zoom, cx, cy);
+    var distM = haversineDistance(txLat, txLng, toLat, toLng);
+    var tileSpanM = mpp * 256;
+    var stepM = tileSpanM * 0.5;
+    var nSteps = Math.max(2, Math.ceil(distM / stepM));
+    for (var i = 0; i <= nSteps; i++) {
+      var frac = i / nSteps;
+      var lat = txLat + (toLat - txLat) * frac;
+      var lng = txLng + (toLng - txLng) * frac;
+      addTile(zoom, lngToTileX(lng, zoom), latToTileY(lat, zoom));
     }
   }
 
