@@ -42,16 +42,26 @@ User draws rectangle on Leaflet map
 
 ### Files
 
-- **`app.js`** — Main controller: Leaflet map init, tile fetching/decoding (main thread Canvas), WebWorker lifecycle, UI state, result display. All terrain tile CORS image loading happens here, not in the worker.
-- **`terrain-worker.js`** — Off-thread terrain analysis engine. Receives a raw `Float32Array` elevation grid. Contains all geospatial math: coordinate conversions (Mercator tile↔lat/lng), slope, peak finding, valley detection, scoring, clustering. Communicates via `postMessage` with progress updates.
+- **`app.js`** — Main controller for the viewpoint pipeline: Leaflet map init, tile fetching/decoding (main thread via `TerrainTiles`), `terrain-worker.js` lifecycle, UI state, result display.
+- **`terrain-worker.js`** — Off-thread viewpoint analysis engine. Receives a raw `Float32Array` elevation grid. Contains slope, peak finding, valley detection, scoring, clustering. Communicates via `postMessage` with progress updates.
+- **`terrain-tiles.js`** — Shared tile utility (`window.TerrainTiles` / `self.TerrainTiles`). Tile coord math, Terrarium decode, and tile fetching with an in-memory cache. Works in both the window (via `<canvas>`) and Web Workers (via `importScripts` + `OffscreenCanvas` + `createImageBitmap`). Used directly by the radio workers; the viewpoint worker still relies on the main thread to hand it a decoded grid.
 - **`globe.js`** — Interactive 3D Earth widget (p5.js WEBGL, instance mode). Satellite texture composited from Esri tiles at zoom 2 (4×4 → 1024px), remapped from Web Mercator to equirectangular before UV-mapping onto the sphere. State machine: dragging → decelerating → settled → showcase. Fires `globe-navigate` CustomEvent; app.js listens and calls `map.flyTo`. Map navigation only triggers on label click, not globe click.
+- **`radio-reach.js`** — Radio Reach app controller (`window.RadioReach`). Owns its own Leaflet map, sidebar, progress overlay, and gradient coverage canvas layer. Manages the radio worker lifecycle and the propagation worker pool. See the Radio Reach section.
+- **`radio-worker.js`** — Radio pipeline orchestrator worker. Phase 1: 360-ray geometric LOS pre-filter (k=4/3 earth refraction). Phase 2: dilated evaluation mask. Phase 3: partitions reachable cells into angular slices and delegates to propagation workers. Requests tiles from the main thread via a `needTiles` message.
+- **`radio-propagation-worker.js`** — Longley-Rice ITM evaluation slice worker. Loads the WASM ITM engine from `vendor/itm/` and evaluates path loss per cell, emitting `coverageBatch` messages directly to the main thread. Spawned in a pool (up to 4, sized from `navigator.hardwareConcurrency - 1`).
+- **`i18n.js`** — Lightweight i18n runtime (`window.i18n`). Loads `locales/{en,tr}.json`, applies `data-i18n`, `data-i18n-attr`, `data-i18n-placeholder` on elements. Language source is `localStorage('sv_buddy_lang')`, shared with Rocky.
+- **`tutorial.js`** — First-visit interactive tutorial (`window.Tutorial`). Parses `scripts/rocky-tutorial.md`, points Rocky at UI elements, persists completion via `localStorage('sv_tutorial_done')`.
+- **`buddy-integration.js`** — Rocky glue code. See the Rocky section.
 - **`style.css`** — Windows XP/7 Aero-inspired glassmorphism theme (light, not dark). Note: elements using `display: flex` need explicit `[hidden]` selectors (e.g., `#progress-overlay[hidden] { display: none; }`) because CSS display overrides the HTML `hidden` attribute. Windows use a manual z-index counter (`_topZ = 300`, incremented on focus) for stacking order.
 - **`index.html`** — Single page. Dependencies loaded via CDN: Leaflet, Leaflet.Draw, Leaflet.markercluster, p5.js, Ubuntu font.
+- **`vendor/itm/`** — NTIA Longley-Rice ITM C++ compiled to WebAssembly (`itm-glue.wasm`) plus JS loader/wrapper and a JS reference port (`itm-js-reference.js`). Used by `radio-propagation-worker.js`. Rebuild WASM with `bash vendor/itm/build-wasm.sh` (requires Emscripten SDK).
+- **`locales/{en,tr}.json`** — UI string tables consumed by `i18n.js`.
+- **`scripts/rocky-terrain.{en,tr}.md`**, **`scripts/rocky-tutorial.{en,tr}.md`** — Rocky dialogue and tutorial scripts per language (see Rocky section).
 
 ### Key Design Decisions
 
-- Terrain tile decoding uses main-thread `<canvas>` (not OffscreenCanvas in worker) for broader browser compatibility
-- Analysis zoom is fixed at z=11 (~58m/pixel at 40°N latitude)
+- Viewpoint pipeline: terrain tile decoding uses main-thread `<canvas>` for broader browser compatibility; the radio pipeline uses `OffscreenCanvas` inside the workers via `terrain-tiles.js`
+- Viewpoint analysis zoom is fixed at z=11 (~58m/pixel at 40°N latitude); radio analysis defaults to z=12 (selectable z8–z12 in Advanced settings)
 - 1-tile padding around user selection ensures peaks near edges are detected
 - Viewpoint candidates are subsampled every 3rd pixel for performance
 - Results are spatially clustered (400m min distance) and capped at 150
@@ -107,10 +117,13 @@ An animated 3D character (Three.js) embedded as a desktop pet. Source project li
 - **`scripts/rocky-tutorial.{en,tr}.md`** — Tutorial dialogue scripts per language.
 
 **Event bridge (app.js → buddy-integration.js):**
+- `wt:rectangle-drawn` — dispatched after the user draws a selection rectangle
 - `wt:analysis-start` — dispatched when terrain analysis begins
 - `wt:results` — dispatched after `displayResults()`, detail: `{ count }`
 - `wt:like` — dispatched after `toggleLike()`, detail: `{ added: boolean }`
 - `wt:star` — dispatched after `toggleStar()`, detail: `{ added: boolean }`
+
+Radio Reach does not currently dispatch `wt:` events.
 
 **Event bridge (buddy scripts → buddy-integration.js):**
 - `buddy:trigger` with `detail: 'spin-globe'` — triggers the globe spin orchestration
@@ -143,6 +156,45 @@ cd ../desktop-buddy && pnpm build
 cp dist/desktop-buddy.iife.js ../world-toolkit/vendor/desktop-buddy/
 cp -r dist/Models/ ../world-toolkit/Models/
 ```
+
+### Internationalization
+
+- Supported languages: `en`, `tr`. Strings live in `locales/{lang}.json`; default is `en`.
+- `i18n.js` resolves language via `window.getCurrentLang()` → `localStorage('sv_buddy_lang')` → `navigator.language` prefix → `'en'`. Same key as Rocky, so UI and dialogue stay in sync.
+- HTML hooks: `data-i18n="key"` (textContent), `data-i18n-attr="attr:key,attr2:key2"` (attributes), `data-i18n-placeholder="key"` (input placeholder). Parameters via `{{name}}`.
+- `window.i18n.setLang(lang)` switches language, re-applies translations, and dispatches an `i18n:changed` CustomEvent. `buddy-integration.js` destroys and reinits Rocky on language change.
+
+### Radio Reach
+
+A second self-contained app mounted in `#radio-window`, opened via the Radio Reach desktop icon. Runs a Longley-Rice ITM propagation analysis and renders a gradient coverage canvas layer on its own Leaflet map.
+
+```
+User clicks map to place TX; optionally right-clicks / long-presses to set a direction target
+  → radio-reach.js validates budget (MAX_RADIUS_KM=1000, MAX_TILES_LIMIT=2000, MAX_BITMAP_MB=300)
+    and shows a memory warning/block based on MEMORY_RISK_RATIO_WARN / _BLOCK
+  → Spawns 1 orchestrator worker (radio-worker.js) + N propagation workers
+    (radio-propagation-worker.js, PROP_WORKER_COUNT = min(4, hardwareConcurrency-1))
+  → Orchestrator Phase 1: 360-ray geometric LOS pre-filter with 4/3-earth refraction
+  → Orchestrator Phase 2: dilated evaluation mask (BUFFER_KM=4)
+  → Orchestrator Phase 3: partitions reachable cells into angular wedges (WEDGE_DEG=10)
+    and hands each wedge's cell list to a propagation worker
+  → Each propagation worker evaluates ITM path loss per cell via WASM and emits
+    coverageBatch messages (every COVERAGE_BATCH_SIZE=500 cells) straight to the main thread
+  → radio-reach.js paints batches into an ImageData-backed canvas overlay
+    with Strong / Usable / Marginal bands
+```
+
+**Tile fetching protocol:** Workers do NOT fetch tiles themselves. They send `{ type: 'needTiles', tiles: [...] }` to the main thread, which fetches via `TerrainTiles.getTile` and posts back the decoded `Float32Array` elevation grids. This keeps network/Canvas work on the main thread and shares the tile cache across all workers.
+
+**Key limits** (from `radio-reach.js`): `MAX_RADIUS_KM=1000`, `MAX_TILES_LIMIT=2000`, `MAX_BITMAP_MB=300`, `COVERAGE_BUFFER_KM=4`, `BROWSER_OVERHEAD_MB=180`, `PROP_WORKER_OVERHEAD_MB=32`, `BITMAP_BYTES_PER_PIXEL=9` (ImageData + band buffer + canvas backing), `SWEEP_TILE_FETCH_CONCURRENCY=4`, `RADAR_SWEEP_WEDGE_DEG=10`.
+
+**ITM engine:** WASM (`vendor/itm/itm-glue.wasm`) by default, selectable in Advanced settings. `itm-js-reference.js` exists as a JS port for comparison only. Rebuild WASM with `bash vendor/itm/build-wasm.sh` (Emscripten SDK required).
+
+**Advanced settings** (`<details id="radio-advanced-settings">`): resolution override, engine picker (WASM / JS), sweep mode, adaptive culling, fast-fill, and debug overlays (downloaded tiles, skipped tiles, tile borders, wedge borders, analysis bounds). Debug overlays render into dedicated Leaflet panes `radio-debug-pane` / `radio-preview-pane`.
+
+**Persistence** (`localStorage` keys, all `sv_radio_*`): `sv_radio_map_view` (falls back to `sv_map_view` on first open so the radio map opens where the viewpoint map was), `sv_radio_filters_collapsed`, `sv_radio_advanced_open`. TX location is not persisted.
+
+**Lifecycle hooks from app.js:** `window.RadioReach.init()` is called once at load; `window.RadioReach.invalidateMap()` is called whenever the radio window is shown, focused, maximized, or resized, so Leaflet reclaims its container size.
 
 ### Mobile Layout
 

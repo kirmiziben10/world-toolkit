@@ -1,18 +1,4 @@
 # Rocky's Terrain Guide
-<!-- sequence: welcome -->
-
-> {color:cyan}Merhaba!{/color} Ben {bold}Rocky{/bold}, senin arazideki rehberin!
-<!-- trigger: wave -->
-
-> Piknik ve kamp yapmak için en {rainbow}manzaralı noktaları{/rainbow} bulmana yardım edeceğim!
-
-> Haritada bir {bold}dikdörtgen çiz{/bold}, ardından başlamak için {color:green}Alanı Analiz Et{/color} düğmesine tıkla!
-
-> Menü için {color:green}üzerime sağ tıkla{/color} veya sohbet etmek için istediğin zaman {bold}bana tıkla{/bold}!
-
-> Şimdi keşfetmeye başla! Yol boyunca seni destekleyeceğim!
-
----
 
 # Responses
 <!-- responses -->

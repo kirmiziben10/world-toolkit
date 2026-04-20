@@ -175,5 +175,12 @@
   "radioMemoryWarningSweep": "Tarama modu kapalı olduğu için tüm kapsama bitmap'i aynı anda bellekte tutulur; büyük çalıştırmalar sekmeyi çökertabilir.",
   "radioMemoryWarningManualZoom": "Elle bir yakınlaştırma seçildiği için bu çalıştırmada otomatik aşağı ölçekleme koruması devre dışı kalır.",
   "radioSweepProgress": "Radar tarama: dilim {{done}} / {{total}}",
-  "skipTutorial": "Eğitimi atla"
+  "skipTutorial": "Eğitimi atla",
+  "buddyAnalysisStart": "{color:cyan}Oooh!{/color} Araziyi tarıyorum... Hadi birkaç {bold}muhteşem{/bold} manzara noktası bulalım!",
+  "buddyResultsZero": "Hmm, {shake}hiç nokta{/shake} eşleşmedi. {bold}Daha geniş bir alan{/bold} deneyin ya da filtreleri {color:green}gevşetin{/color}!",
+  "buddyResultsOne": "{color:cyan}1 manzara noktası bulundu!{/color} Azı karar, çoğu zarar! {bold}Bir işaretçiye tıkla{/bold} ve keşfet.",
+  "buddyResultsFew": "{color:cyan}{{count}} manzara noktası bulundu!{/color} Azı karar, çoğu zarar! {bold}Bir işaretçiye tıkla{/bold} ve keşfet.",
+  "buddyResultsMany": "{rainbow}Vay be!{/rainbow} {bold}{{count}} manzara noktası{/bold} buldum! Resmen {shake}manzara hazinesi{/shake}!",
+  "buddyLikeReaction": "Harika seçim! Oradaki manzara {rainbow}nefes kesici{/rainbow} olmalı!",
+  "buddyStarReaction": "{bold}Yıldızlandı!{/bold} {color:green}Yürüyüş botlarını{/color} unutma!"
 }

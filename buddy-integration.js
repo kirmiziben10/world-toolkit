@@ -48,10 +48,21 @@
     window.getCurrentLang = getCurrentLang;
 
     // --- Init ---
+    // Visit state:
+    //   1st visit (no sv_tutorial_done): full mode, tutorial runs.
+    //   2nd visit (tutorial done, no sv_second_visit_done): miniature mode, silent wave.
+    //   3rd+:  whatever sv_buddy_mode says.
+    function isFirstVisit() {
+      return localStorage.getItem('sv_tutorial_done') !== 'true';
+    }
+    function isSecondVisit() {
+      return !isFirstVisit() && localStorage.getItem('sv_second_visit_done') !== 'true';
+    }
+
     function resolveBuddyMode() {
       if (IS_MOBILE) return 'miniature';
-      var isFirstVisit = localStorage.getItem('sv_tutorial_done') !== 'true';
-      if (isFirstVisit) return 'full';
+      if (isFirstVisit()) return 'full';
+      if (isSecondVisit()) return 'miniature';
       var saved = localStorage.getItem('sv_buddy_mode');
       if (saved === 'miniature' || saved === 'full') return saved;
       return 'full';
@@ -60,9 +71,10 @@
     function initBuddy() {
       var lang = getCurrentLang();
       var buddyMode = resolveBuddyMode();
+      var secondVisit = isSecondVisit();
       buddy = window.DesktopBuddy.init({
         scriptUrl: 'scripts/rocky-terrain.' + lang + '.md',
-        startSequence: window.Tutorial && window.Tutorial.shouldRun() ? undefined : 'welcome',
+        // No auto sequence. First visit → Tutorial. Second visit → silent wave below.
         mode: buddyMode,
         x: IS_MOBILE ? window.innerWidth - 60 : window.innerWidth - 120,
         y: IS_MOBILE ? window.innerHeight - 50 : undefined,
@@ -75,9 +87,134 @@
           localStorage.setItem('sv_buddy_mode', mode);
         };
       }
+      installSkipButtons(buddy);
+      if (secondVisit) {
+        localStorage.setItem('sv_second_visit_done', 'true');
+        // Seed sv_buddy_mode so 3rd+ visits respect the miniature default
+        // unless the user flips it (the setMode interceptor rewrites on change).
+        if (!IS_MOBILE && !localStorage.getItem('sv_buddy_mode')) {
+          localStorage.setItem('sv_buddy_mode', 'miniature');
+        }
+      }
+      // Wave hello on every visit after the tutorial is done.
+      if (!isFirstVisit()) {
+        setTimeout(function () {
+          if (buddy) buddy.controller.handleTrigger('wave');
+        }, 800);
+      }
       document.addEventListener('pointerdown', resetActivity);
       document.addEventListener('keydown', resetActivity);
       startIdleTimer();
+    }
+
+    // --- Skip button (speech bubble + VN box) ---
+    function skipActiveSpeech() {
+      if (!buddy) return;
+      if (window.Tutorial && window.Tutorial.isActive) {
+        window.Tutorial.skip();
+        return;
+      }
+      var sr = buddy.scriptRunner;
+      if (sr && sr.isActive && Array.isArray(sr.currentNodes)) {
+        // Jump past the end — advance() then dismisses speech and emits
+        // dialogue:complete, which the embed's syncAdvanceButton listens for.
+        sr.nodeIndex = sr.currentNodes.length;
+        sr.advance();
+        return;
+      }
+      buddy.controller.dismissSpeech();
+    }
+
+    function makeBubbleSkipBtn() {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '\u00D7';
+      btn.setAttribute('aria-label', 'Skip');
+      Object.assign(btn.style, {
+        position: 'absolute',
+        top: '4px',
+        right: '4px',
+        width: '20px',
+        height: '20px',
+        padding: '0',
+        borderRadius: '50%',
+        border: '1px solid rgba(255,255,255,0.55)',
+        background: 'rgba(255,255,255,0.72)',
+        color: '#203040',
+        font: '600 14px monospace',
+        lineHeight: '1',
+        cursor: 'pointer',
+        pointerEvents: 'auto',
+        boxShadow: '0 1px 6px rgba(0,0,0,0.16)',
+        display: 'none',
+        zIndex: '2',
+      });
+      return btn;
+    }
+
+    function makeDialogueSkipBtn() {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = getCurrentLang() === 'tr' ? 'Atla' : 'Skip';
+      btn.setAttribute('aria-label', 'Skip');
+      Object.assign(btn.style, {
+        position: 'absolute',
+        top: '-15px',
+        right: '30px',
+        padding: '10px 14px',
+        background: '#3E3E3E',
+        borderRadius: '20px',
+        border: 'none',
+        color: '#FFFFFF',
+        font: '700 14px Ubuntu, system-ui, -apple-system, sans-serif',
+        lineHeight: '9px',
+        cursor: 'pointer',
+        pointerEvents: 'auto',
+        boxShadow: '0 3px 5px rgba(0,0,0,0.2), inset -2px -2px 2px rgba(0,0,0,0.1), inset 3px 3px 2px -1px rgba(255,255,255,0.1)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+        display: 'none',
+        zIndex: '2',
+      });
+      return btn;
+    }
+
+    function installSkipButtons(buddyInst) {
+      var sb = buddyInst.controller.speechBubble;
+      var db = buddyInst.controller.dialogueBox;
+      if (!sb || !db || !sb.el || !db.el) return;
+
+      var bubbleBtn = makeBubbleSkipBtn();
+      var dialogueBtn = makeDialogueSkipBtn();
+      sb.el.appendChild(bubbleBtn);
+      db.el.appendChild(dialogueBtn);
+
+      function onClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        skipActiveSpeech();
+      }
+      bubbleBtn.addEventListener('click', onClick);
+      dialogueBtn.addEventListener('click', onClick);
+      // Prevent pointerdown from starting a drag on the buddy
+      bubbleBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+      dialogueBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+
+      function sync() {
+        bubbleBtn.style.display = sb.isVisible ? 'inline-flex' : 'none';
+        dialogueBtn.style.display = db.isVisible ? 'inline-flex' : 'none';
+      }
+      // say() and dismissSpeech() are the only entry points that change visibility
+      var origSay = buddyInst.controller.say.bind(buddyInst.controller);
+      buddyInst.controller.say = function (text) {
+        origSay(text);
+        sync();
+      };
+      var origDismiss = buddyInst.controller.dismissSpeech.bind(buddyInst.controller);
+      buddyInst.controller.dismissSpeech = function () {
+        origDismiss();
+        sync();
+      };
     }
 
     function destroyBuddy() {
@@ -202,10 +339,7 @@
 
     document.addEventListener('wt:analysis-start', function () {
       resetActivity();
-      reactWithCooldown(
-        '{color:cyan}Ooh!{/color} Scanning the terrain... Let\'s find some {bold}amazing{/bold} viewpoints!',
-        'wave'
-      );
+      reactWithCooldown(window.i18n.t('buddyAnalysisStart'), 'wave');
     });
 
     document.addEventListener('wt:results', function (e) {
@@ -213,36 +347,26 @@
       var count = e.detail && e.detail.count;
       if (count == null) return;
       if (count === 0) {
-        reactWithCooldown(
-          'Hmm, {shake}no spots{/shake} matched. Try a {bold}larger area{/bold} or {color:green}lower{/color} the filters!'
-        );
+        reactWithCooldown(window.i18n.t('buddyResultsZero'));
+      } else if (count === 1) {
+        reactWithCooldown(window.i18n.t('buddyResultsOne'));
       } else if (count < 10) {
-        reactWithCooldown(
-          '{color:cyan}Found ' + count + ' viewpoint' + (count === 1 ? '' : 's') + '!{/color} ' +
-          'Quality over quantity! {bold}Click a marker{/bold} to explore.'
-        );
+        reactWithCooldown(window.i18n.t('buddyResultsFew', { count: count }));
       } else {
-        reactWithCooldown(
-          '{rainbow}Wow!{/rainbow} {bold}' + count + ' viewpoints{/bold} found! ' +
-          'That\'s a {shake}goldmine{/shake} of scenic spots!'
-        );
+        reactWithCooldown(window.i18n.t('buddyResultsMany', { count: count }));
       }
     });
 
     document.addEventListener('wt:like', function (e) {
       if (!e.detail || !e.detail.added) return;
       resetActivity();
-      reactWithCooldown(
-        'Great pick! I bet the view from there is {rainbow}breathtaking{/rainbow}!'
-      );
+      reactWithCooldown(window.i18n.t('buddyLikeReaction'));
     });
 
     document.addEventListener('wt:star', function (e) {
       if (!e.detail || !e.detail.added) return;
       resetActivity();
-      reactWithCooldown(
-        '{bold}Starred!{/bold} Don\'t forget your {color:green}hiking boots{/color}!'
-      );
+      reactWithCooldown(window.i18n.t('buddyStarReaction'));
     });
 
     document.addEventListener('buddy:trigger', function(e) {

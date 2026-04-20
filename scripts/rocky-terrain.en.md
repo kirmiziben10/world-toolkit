@@ -1,18 +1,4 @@
 # Rocky's Terrain Guide
-<!-- sequence: welcome -->
-
-> {color:cyan}Hey there!{/color} I'm {bold}Rocky{/bold}, your terrain buddy!
-<!-- trigger: wave -->
-
-> I help you find the most {rainbow}scenic viewpoints{/rainbow} for picnics and camping!
-
-> {bold}Draw a rectangle{/bold} on the map, then hit {color:green}Analyze Area{/color} to start!
-
-> {color:green}Right-click on me{/color} for a menu, or {bold}click me{/bold} anytime to chat!
-
-> Now go explore! I'll cheer you on along the way!
-
----
 
 # Responses
 <!-- responses -->
