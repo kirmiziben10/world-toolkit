@@ -27,6 +27,7 @@
   var RADAR_SWEEP_WEDGE_DEG = 10;
   var RADIO_DEBUG_PANE = 'radio-debug-pane';
   var RADIO_PREVIEW_PANE = 'radio-preview-pane';
+  var RADIO_BEARING_PANE = 'radio-bearing-pane';
   // ImageData (4 B/px) + band buffer (1 B/px) + canvas backing store (~4 B/px).
   var BITMAP_BYTES_PER_PIXEL = 9;
   var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
@@ -53,6 +54,14 @@
     'reliable-time': { time: 90, location: 50, situation: 50 },
     'time-location': { time: 90, location: 90, situation: 50 },
     conservative: { time: 90, location: 90, situation: 90 },
+  };
+  var PATTERN_PRESET_GAINS_DBI = {
+    omni: 0,
+    monopole: 2.15,
+    dipole: 2.15,
+    yagi3: 7,
+    yagi5: 10.5,
+    cardioid: 4,
   };
 
   // Attribution strings
@@ -82,6 +91,9 @@
     customPattern: null,
     customPatternName: '',
     customPatternInvalid: false,
+    patternHandle: null,
+    draggingPatternHandle: false,
+    manualTxGainDbi: 0,
   };
 
   // ===== DOM refs (cached on init) =====
@@ -89,8 +101,9 @@
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl, eirpDisplayEl,
       antennaInput, radiusInput, frequencySelect, frequencyCustomGroup,
-      frequencyCustomInput, txPowerInput, txGainInput,
-      rxGainInput, rxHeightInput, rxHeightPresetSelect,
+      frequencyCustomInput, txPowerInput, txGainInput, txGainGroupEl,
+      txGainAutoCheck, txGainHintEl,
+      rxGainInput, rxGainPresetSelect, rxHeightInput, rxHeightPresetSelect,
       rxSensitivityInput, rxSensitivityPresetSelect,
       climateSelect, n0Input, terrainPresetSelect,
       terrainEpsilonGroup, terrainEpsilonInput,
@@ -99,15 +112,18 @@
       statLocationGroup, statLocationInput, statLocationValueEl,
       statSituationGroup, statSituationInput, statSituationValueEl,
       mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck, mdvarValueEl,
+      patternMapControlEl, patternMapReadoutEl, patternRotateLeftBtn, patternRotateRightBtn,
       patternPresetSelect, patternBearingInput, patternUploadGroup,
       patternUploadBtn, patternFileInput, patternFileStatusEl,
+      patternDebugPreviewCanvas, patternDebugCaptionEl,
       resolutionSelect, sectorAngleInput,
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
       radarSweepCheck, adaptiveCullingCheck, fastFillCheck,
       clearDirectionBtn, fastFillLabelEl, radioTerrainCreditEl, itmEngineSelect,
       polarizationSelect,
       advancedSettingsEl, debugDownloadedTilesCheck, debugSkippedTilesCheck,
-      debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck;
+      debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck,
+      helpPopoverEl;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -136,7 +152,11 @@
     resolutionSelect = document.getElementById('radio-resolution');
     txPowerInput = document.getElementById('radio-tx-power');
     txGainInput = document.getElementById('radio-tx-gain');
+    txGainGroupEl = document.getElementById('radio-tx-gain-group');
+    txGainAutoCheck = document.getElementById('radio-tx-gain-auto');
+    txGainHintEl = document.getElementById('radio-tx-gain-hint');
     rxGainInput = document.getElementById('radio-rx-gain');
+    rxGainPresetSelect = document.getElementById('radio-rx-gain-preset');
     rxHeightInput = document.getElementById('radio-rx-height');
     rxHeightPresetSelect = document.getElementById('radio-rx-height-preset');
     rxSensitivityInput = document.getElementById('radio-rx-sensitivity');
@@ -162,12 +182,18 @@
     mdvarLocationCheck = document.getElementById('radio-mdvar-location');
     mdvarSituationCheck = document.getElementById('radio-mdvar-situation');
     mdvarValueEl = document.getElementById('radio-mdvar-value');
+    patternMapControlEl = document.getElementById('radio-pattern-map-control');
+    patternMapReadoutEl = document.getElementById('radio-pattern-map-readout');
+    patternRotateLeftBtn = document.getElementById('radio-pattern-rotate-left');
+    patternRotateRightBtn = document.getElementById('radio-pattern-rotate-right');
     patternPresetSelect = document.getElementById('radio-pattern-preset');
     patternBearingInput = document.getElementById('radio-pattern-bearing');
     patternUploadGroup = document.getElementById('radio-pattern-upload-group');
     patternUploadBtn = document.getElementById('radio-pattern-upload-btn');
     patternFileInput = document.getElementById('radio-pattern-file');
     patternFileStatusEl = document.getElementById('radio-pattern-file-status');
+    patternDebugPreviewCanvas = document.getElementById('radio-pattern-debug-preview');
+    patternDebugCaptionEl = document.getElementById('radio-pattern-debug-caption');
     legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
@@ -196,16 +222,22 @@
       statsPanelEl.hidden = true;
     });
     document.addEventListener('i18n:changed', function () {
+      hideHelpPopover();
       updateTerrainCreditHtml();
+      updateTxGainUi();
       updatePatternUi();
+      renderPatternDebugPreview();
       updateEirpDisplay();
       updateMdvarUi();
+      updatePatternMapControl();
     });
 
     bindWarningInputs();
     bindDebugInputs();
     syncFastFillControl();
+    initHelpTips();
     initAdvancedSettings();
+    initTxGainControls();
     initReceiverPresets();
     initEnvironmentControls();
     initStatisticalControls();
@@ -224,6 +256,73 @@
     updateDirectionPreview();
   }
 
+  function initHelpTips() {
+    helpPopoverEl = document.getElementById('radio-help-popover');
+    if (!helpPopoverEl) {
+      helpPopoverEl = document.createElement('div');
+      helpPopoverEl.id = 'radio-help-popover';
+      helpPopoverEl.className = 'radio-help-popover';
+      document.body.appendChild(helpPopoverEl);
+    }
+
+    var helpButtons = document.querySelectorAll('.radio-help-tip');
+    for (var i = 0; i < helpButtons.length; i++) {
+      var button = helpButtons[i];
+      button.addEventListener('mouseenter', handleHelpTipEnter);
+      button.addEventListener('focus', handleHelpTipEnter);
+      button.addEventListener('mouseleave', handleHelpTipLeave);
+      button.addEventListener('blur', handleHelpTipLeave);
+    }
+
+    window.addEventListener('scroll', hideHelpPopover, true);
+    window.addEventListener('resize', hideHelpPopover);
+  }
+
+  function handleHelpTipEnter(event) {
+    showHelpPopover(event.currentTarget);
+  }
+
+  function handleHelpTipLeave() {
+    hideHelpPopover();
+  }
+
+  function showHelpPopover(button) {
+    if (!helpPopoverEl || !button) return;
+
+    var tooltipText = button.getAttribute('data-tooltip');
+    if (!tooltipText) {
+      hideHelpPopover();
+      return;
+    }
+
+    helpPopoverEl.textContent = tooltipText;
+    helpPopoverEl.classList.add('is-visible');
+
+    var rect = button.getBoundingClientRect();
+    var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    var popoverRect = helpPopoverEl.getBoundingClientRect();
+    var left = rect.left + 12;
+    var top = rect.bottom + 10;
+
+    if (left + popoverRect.width > viewportWidth - 12) {
+      left = Math.max(12, viewportWidth - popoverRect.width - 12);
+    }
+    if (top + popoverRect.height > viewportHeight - 12) {
+      top = Math.max(12, viewportHeight - popoverRect.height - 12);
+    }
+
+    helpPopoverEl.style.left = left + 'px';
+    helpPopoverEl.style.top = top + 'px';
+  }
+
+  function hideHelpPopover() {
+    if (!helpPopoverEl) return;
+    helpPopoverEl.classList.remove('is-visible');
+    helpPopoverEl.style.left = '';
+    helpPopoverEl.style.top = '';
+  }
+
   // ===== Map =====
   function initMap() {
     radioState.map = L.map('radio-map', {
@@ -239,6 +338,8 @@
     previewPane.style.pointerEvents = 'none';
     radioState.debugLayer = L.layerGroup().addTo(radioState.map);
     radioState.previewLayer = L.layerGroup().addTo(radioState.map);
+    var bearingPane = radioState.map.createPane(RADIO_BEARING_PANE);
+    bearingPane.style.zIndex = '560';
 
     // Base layers
     var topo = L.tileLayer(
@@ -341,6 +442,7 @@
   }
 
   function initReceiverPresets() {
+    bindPresetSelect(rxGainInput, rxGainPresetSelect, [0, 3, 6, 12]);
     bindPresetSelect(rxHeightInput, rxHeightPresetSelect, [1.5, 2, 10, 30]);
     bindPresetSelect(rxSensitivityInput, rxSensitivityPresetSelect, [-110, -116, -130, -140]);
   }
@@ -380,9 +482,34 @@
     updateMdvarUi();
   }
 
+  function initTxGainControls() {
+    radioState.manualTxGainDbi = clampNumber(txGainInput ? txGainInput.value : 0, -10, 30, 0);
+
+    if (txGainAutoCheck) {
+      txGainAutoCheck.addEventListener('change', function () {
+        if (isTxGainLinkedToPattern()) {
+          applyPatternPresetGain(patternPresetSelect ? patternPresetSelect.value : 'omni');
+        } else if (txGainInput && radioState.manualTxGainDbi !== null) {
+          txGainInput.value = radioState.manualTxGainDbi;
+        }
+        updateTxGainUi();
+        refreshAnalysisUiState();
+      });
+    }
+
+    if (txGainInput) {
+      txGainInput.addEventListener('input', rememberManualTxGain);
+      txGainInput.addEventListener('change', rememberManualTxGain);
+    }
+
+    updateTxGainUi();
+  }
+
   function initPatternControls() {
     if (patternPresetSelect) {
       patternPresetSelect.addEventListener('change', function () {
+        applyPatternPresetGain(patternPresetSelect.value);
+        updateTxGainUi();
         updatePatternUi();
         refreshAnalysisUiState();
       });
@@ -395,7 +522,89 @@
       patternFileInput.addEventListener('change', handlePatternFileSelected);
     }
 
+    if (patternRotateLeftBtn) {
+      patternRotateLeftBtn.addEventListener('click', function () {
+        nudgePatternBearing(-15);
+      });
+    }
+    if (patternRotateRightBtn) {
+      patternRotateRightBtn.addEventListener('click', function () {
+        nudgePatternBearing(15);
+      });
+    }
+
     updatePatternUi();
+    applyPatternPresetGain(patternPresetSelect ? patternPresetSelect.value : 'omni');
+    updateTxGainUi();
+    updatePatternMapControl();
+    renderPatternDebugPreview();
+  }
+
+  function rememberManualTxGain() {
+    if (!txGainInput || txGainInput.disabled) return;
+    var gain = clampNumber(txGainInput.value, -10, 30, 0);
+    txGainInput.value = gain;
+    radioState.manualTxGainDbi = gain;
+    updateTxGainUi();
+  }
+
+  function applyPatternPresetGain(preset) {
+    if (!txGainInput) return;
+
+    if (!isTxGainLinkedToPattern()) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(PATTERN_PRESET_GAINS_DBI, preset)) {
+      return;
+    }
+
+    txGainInput.value = PATTERN_PRESET_GAINS_DBI[preset];
+  }
+
+  function isTxGainLinkedToPattern() {
+    var preset = patternPresetSelect ? patternPresetSelect.value : 'omni';
+    return !!(txGainAutoCheck && txGainAutoCheck.checked && Object.prototype.hasOwnProperty.call(PATTERN_PRESET_GAINS_DBI, preset));
+  }
+
+  function formatGainDbi(value) {
+    return String(parseFloat(Number(value).toFixed(2)));
+  }
+
+  function getSelectedPatternLabel() {
+    if (!patternPresetSelect) return '';
+    var option = patternPresetSelect.options[patternPresetSelect.selectedIndex];
+    return option ? option.textContent : '';
+  }
+
+  function updateTxGainUi() {
+    if (!txGainInput) return;
+
+    var preset = patternPresetSelect ? patternPresetSelect.value : 'omni';
+    var hasTypical = Object.prototype.hasOwnProperty.call(PATTERN_PRESET_GAINS_DBI, preset);
+    var useTypical = !!(txGainAutoCheck && txGainAutoCheck.checked && hasTypical);
+
+    txGainInput.disabled = useTypical;
+    if (txGainGroupEl) {
+      txGainGroupEl.classList.toggle('is-disabled', useTypical);
+    }
+
+    if (!txGainHintEl) return;
+
+    if (useTypical) {
+      txGainHintEl.textContent = t('radioTxGainHintPattern', {
+        pattern: getSelectedPatternLabel(),
+        gain: formatGainDbi(PATTERN_PRESET_GAINS_DBI[preset])
+      });
+      return;
+    }
+
+    if (txGainAutoCheck && txGainAutoCheck.checked && !hasTypical) {
+      txGainHintEl.textContent = t('radioTxGainHintNoTypical');
+      return;
+    }
+
+    txGainHintEl.textContent = t('radioTxGainHintCustom');
   }
 
   function initFrequencyControls() {
@@ -543,7 +752,7 @@
     return {
       climate: getSelectedClimate(),
       n0: n0,
-      pol: polarizationSelect && polarizationSelect.value === '0' ? 0 : DEFAULT_ITM_PARAMS.pol,
+      pol: getSelectedPolarization(),
       epsilon: terrain.epsilon,
       sigma: terrain.sigma,
       mdvar: getSelectedMdvar(),
@@ -551,6 +760,13 @@
       location: statistical.location,
       situation: statistical.situation,
     };
+  }
+
+  function getSelectedPolarization() {
+    if (!polarizationSelect) return DEFAULT_ITM_PARAMS.pol;
+    if (polarizationSelect.value === '0') return 0;
+    if (polarizationSelect.value === '45') return 45;
+    return DEFAULT_ITM_PARAMS.pol;
   }
 
   function handlePatternFileSelected() {
@@ -634,10 +850,125 @@
     }
   }
 
+  function drawPatternDebugPreviewFrame(ctx, cx, cy, outerRadius, width, height) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#fbf7ea';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(101, 88, 59, 0.16)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    ctx.lineTo(cx, cy + outerRadius);
+    ctx.moveTo(cx - outerRadius, cy);
+    ctx.lineTo(cx + outerRadius, cy);
+    ctx.stroke();
+
+    [0.33, 0.66, 1].forEach(function (ratio) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerRadius * ratio, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = '#85795f';
+    ctx.font = '10px Ubuntu, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', cx, cy - outerRadius - 8);
+  }
+
+  function renderPatternDebugPreviewPlaceholder(ctx, cx, cy, outerRadius) {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(123, 111, 82, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerRadius * 0.86, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#8b7a55';
+    ctx.font = 'bold 15px Ubuntu, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('AZ', cx, cy);
+  }
+
+  function renderPatternDebugPreview() {
+    if (!patternDebugPreviewCanvas) return;
+
+    var ctx = patternDebugPreviewCanvas.getContext('2d');
+    if (!ctx) return;
+
+    var width = patternDebugPreviewCanvas.width;
+    var height = patternDebugPreviewCanvas.height;
+    var cx = width / 2;
+    var cy = height / 2;
+    var outerRadius = Math.min(width, height) * 0.34;
+    var config = getPatternConfig();
+    var caption = getSelectedPatternLabel() + ' | ' + config.bearingDeg + '°';
+
+    drawPatternDebugPreviewFrame(ctx, cx, cy, outerRadius, width, height);
+
+    if (config.preset === 'custom' && !radioState.customPattern) {
+      renderPatternDebugPreviewPlaceholder(ctx, cx, cy, outerRadius);
+      caption = radioState.customPatternInvalid ? t('radioPatternInvalid') : t('radioPatternAwaitingFile');
+      if (patternDebugCaptionEl) patternDebugCaptionEl.textContent = caption;
+      return;
+    }
+
+    var floorDb = -20;
+    for (var sampleIndex = 0; sampleIndex < config.pattern.length; sampleIndex++) {
+      floorDb = Math.min(floorDb, config.pattern[sampleIndex]);
+    }
+    floorDb = Math.min(-20, Math.floor(floorDb / 5) * 5);
+
+    ctx.beginPath();
+    for (var deg = 0; deg <= 360; deg++) {
+      var sampleDeg = deg % 360;
+      var angle = (normalizeBearing(sampleDeg + config.bearingDeg) - 90) * Math.PI / 180;
+      var offsetDb = config.pattern[sampleDeg] || 0;
+      var normalized = clampNumber((offsetDb - floorDb) / (0 - floorDb), 0, 1, 0);
+      var radius = outerRadius * (0.18 + normalized * 0.82);
+      var x = cx + Math.cos(angle) * radius;
+      var y = cy + Math.sin(angle) * radius;
+      if (deg === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(42, 143, 191, 0.20)';
+    ctx.strokeStyle = 'rgba(27, 113, 159, 0.92)';
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+
+    var bearingAngle = (normalizeBearing(config.bearingDeg) - 90) * Math.PI / 180;
+    ctx.strokeStyle = 'rgba(213, 142, 28, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(bearingAngle) * outerRadius * 1.04, cy + Math.sin(bearingAngle) * outerRadius * 1.04);
+    ctx.stroke();
+
+    ctx.fillStyle = '#d58e1c';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(bearingAngle) * outerRadius * 1.04, cy + Math.sin(bearingAngle) * outerRadius * 1.04, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#5f5136';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (patternDebugCaptionEl) patternDebugCaptionEl.textContent = caption;
+  }
+
   function getPatternConfig() {
     var preset = patternPresetSelect ? patternPresetSelect.value : 'omni';
-    var bearingDeg = patternBearingInput ? clampNumber(patternBearingInput.value, 0, 359, 0) : 0;
-    if (patternBearingInput) patternBearingInput.value = bearingDeg;
+    var bearingDeg = getPatternBearingDeg();
 
     return {
       preset: preset,
@@ -650,6 +981,7 @@
     if (preset === 'custom') {
       return radioState.customPattern ? new Float32Array(radioState.customPattern) : createOmniPattern();
     }
+    if (preset === 'monopole') return createMonopolePattern();
     if (preset === 'dipole') return createDipolePattern();
     if (preset === 'yagi3') return createYagi3Pattern();
     if (preset === 'yagi5') return createYagi5Pattern();
@@ -665,31 +997,63 @@
     return pattern;
   }
 
+  function wrappedGaussianLobe(rad, centerDeg, sigmaDeg, amplitude) {
+    var centerRad = centerDeg * Math.PI / 180;
+    var delta = Math.abs(Math.atan2(Math.sin(rad - centerRad), Math.cos(rad - centerRad)));
+    var sigmaRad = sigmaDeg * Math.PI / 180;
+    return amplitude * Math.exp(-0.5 * Math.pow(delta / sigmaRad, 2));
+  }
+
+  function powerToOffsetDb(power, floorDb) {
+    return 10 * Math.log10(Math.max(power, Math.pow(10, floorDb / 10)));
+  }
+
   function createOmniPattern() {
     return new Float32Array(360);
   }
 
+  function createMonopolePattern() {
+    return createOmniPattern();
+  }
+
   function createDipolePattern() {
     return createPattern(function (rad) {
-      return -40 * Math.pow(Math.sin(rad), 2);
+      var power = Math.max(
+        wrappedGaussianLobe(rad, 0, 34, 1),
+        wrappedGaussianLobe(rad, 180, 34, 1)
+      );
+      return powerToOffsetDb(power, -20);
     });
   }
 
   function createYagi3Pattern() {
     return createPattern(function (rad) {
-      return -Math.min(22, 18 * Math.pow(Math.sin(rad / 2), 2) + 4 * Math.pow(Math.sin(rad), 2));
+      var power = Math.max(
+        wrappedGaussianLobe(rad, 0, 20, 1),
+        wrappedGaussianLobe(rad, 180, 28, 0.02),
+        wrappedGaussianLobe(rad, 135, 20, 0.008),
+        wrappedGaussianLobe(rad, 225, 20, 0.008)
+      );
+      return powerToOffsetDb(power, -28);
     });
   }
 
   function createYagi5Pattern() {
     return createPattern(function (rad) {
-      return -Math.min(28, 24 * Math.pow(Math.sin(rad / 2), 2) + 10 * Math.pow(Math.sin(rad), 4));
+      var power = Math.max(
+        wrappedGaussianLobe(rad, 0, 15, 1),
+        wrappedGaussianLobe(rad, 180, 24, 0.006),
+        wrappedGaussianLobe(rad, 145, 15, 0.003),
+        wrappedGaussianLobe(rad, 215, 15, 0.003)
+      );
+      return powerToOffsetDb(power, -34);
     });
   }
 
   function createCardioidPattern() {
     return createPattern(function (rad) {
-      return -20 * Math.pow(Math.sin(rad / 2), 2);
+      var power = Math.pow((1 + Math.cos(rad)) * 0.5, 2);
+      return powerToOffsetDb(power, -18);
     });
   }
 
@@ -728,6 +1092,103 @@
     updateEirpDisplay();
     updateAnalysisWarning();
     updateDirectionPreview();
+    renderPatternDebugPreview();
+  }
+
+  function getPatternBearingDeg() {
+    var bearingDeg = patternBearingInput ? clampNumber(patternBearingInput.value, 0, 359, 0) : 0;
+    bearingDeg = Math.round(normalizeBearing(bearingDeg));
+    if (patternBearingInput) patternBearingInput.value = bearingDeg;
+    return bearingDeg;
+  }
+
+  function setPatternBearingDeg(bearingDeg, shouldRefresh) {
+    bearingDeg = Math.round(normalizeBearing(bearingDeg));
+    if (patternBearingInput) patternBearingInput.value = bearingDeg;
+    updatePatternMapControl();
+    if (shouldRefresh !== false) {
+      refreshAnalysisUiState();
+    }
+  }
+
+  function nudgePatternBearing(deltaDeg) {
+    setPatternBearingDeg(getPatternBearingDeg() + deltaDeg);
+  }
+
+  function isPatternBearingAdjustable() {
+    return !!(patternPresetSelect && patternPresetSelect.value !== 'omni');
+  }
+
+  function updatePatternMapControl() {
+    if (!patternMapControlEl || !patternMapReadoutEl) return;
+
+    var visible = radioState.lat !== null && isPatternBearingAdjustable();
+    patternMapControlEl.hidden = !visible;
+    if (!visible) return;
+
+    patternMapReadoutEl.textContent = getPatternBearingDeg() + '°';
+  }
+
+  function getPatternHandleDistanceM(radiusM) {
+    return Math.min(Math.max(radiusM * 0.18, 600), 3500);
+  }
+
+  function removePatternHandle() {
+    if (radioState.patternHandle && radioState.map) {
+      radioState.map.removeLayer(radioState.patternHandle);
+    }
+    radioState.patternHandle = null;
+    radioState.draggingPatternHandle = false;
+  }
+
+  function ensurePatternHandle() {
+    if (radioState.patternHandle || !radioState.map) return radioState.patternHandle;
+
+    radioState.patternHandle = L.marker([0, 0], {
+      pane: RADIO_BEARING_PANE,
+      draggable: true,
+      keyboard: false,
+      zIndexOffset: 1200,
+      icon: L.divIcon({
+        className: 'radio-bearing-handle',
+        html: '<div class="radio-bearing-handle-knob"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      }),
+    });
+
+    radioState.patternHandle.on('dragstart', function () {
+      radioState.draggingPatternHandle = true;
+    });
+    radioState.patternHandle.on('drag', function (e) {
+      if (radioState.lat === null || radioState.lng === null) return;
+      setPatternBearingDeg(
+        bearingFromLatLng(radioState.lat, radioState.lng, e.latlng.lat, e.latlng.lng),
+        false
+      );
+      updateDirectionPreview();
+    });
+    radioState.patternHandle.on('dragend', function (e) {
+      radioState.draggingPatternHandle = false;
+      if (radioState.lat === null || radioState.lng === null) return;
+      setPatternBearingDeg(
+        bearingFromLatLng(radioState.lat, radioState.lng, e.target.getLatLng().lat, e.target.getLatLng().lng)
+      );
+    });
+    radioState.patternHandle.addTo(radioState.map);
+    return radioState.patternHandle;
+  }
+
+  function syncPatternHandle(handleLatLng) {
+    if (radioState.lat === null || !isPatternBearingAdjustable()) {
+      removePatternHandle();
+      return;
+    }
+
+    var handle = ensurePatternHandle();
+    if (handle && handleLatLng && !radioState.draggingPatternHandle) {
+      handle.setLatLng(handleLatLng);
+    }
   }
 
   function updateEirpDisplay() {
@@ -826,6 +1287,7 @@
 
     radioState.previewLayer.clearLayers();
     syncSectorAngleControl();
+    updatePatternMapControl();
     if (clearDirectionBtn) {
       clearDirectionBtn.hidden = !hasDirectionTarget();
     }
@@ -868,6 +1330,29 @@
         fillOpacity: 0.05,
         interactive: false
       }).addTo(radioState.previewLayer);
+    }
+
+    if (isPatternBearingAdjustable()) {
+      var handlePoint = destinationPoint(
+        radioState.lat,
+        radioState.lng,
+        getPatternBearingDeg(),
+        getPatternHandleDistanceM(radiusM)
+      );
+      var handleLatLng = L.latLng(handlePoint.lat, handlePoint.lng);
+
+      L.polyline([txLatLng, handleLatLng], {
+        pane: RADIO_PREVIEW_PANE,
+        color: '#D58217',
+        weight: 2,
+        opacity: 0.95,
+        dashArray: '5 6',
+        interactive: false
+      }).addTo(radioState.previewLayer);
+
+      syncPatternHandle(handleLatLng);
+    } else {
+      removePatternHandle();
     }
 
     if (!hasDirectionTarget()) {
@@ -1658,6 +2143,7 @@
     radioState.analysisTileCount = 0;
     radioState.analysisTileKeys = null;
     radioState.debugTileRecords = null;
+    removePatternHandle();
 
     if (radioState.marker) {
       radioState.map.removeLayer(radioState.marker);
@@ -1679,6 +2165,7 @@
       warningEl.textContent = '';
       warningEl.removeAttribute('data-level');
     }
+    if (patternMapControlEl) patternMapControlEl.hidden = true;
     clearBtnEl.hidden = true;
     if (clearDirectionBtn) clearDirectionBtn.hidden = true;
     progressOverlayEl.hidden = true;
@@ -2036,12 +2523,13 @@
     });
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
      itmEngineSelect, polarizationSelect, climateSelect, terrainPresetSelect,
-    statModeSelect, mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck,
-     rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
+     statModeSelect, mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck,
+     rxGainPresetSelect, rxHeightPresetSelect, rxSensitivityPresetSelect,
+     patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });
-    [rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
+    [rxGainPresetSelect, rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });

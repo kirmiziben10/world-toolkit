@@ -417,7 +417,7 @@ function handleStartInner(msg) {
   var msgItmParams = msg.itmParams || {};
   itmClimate = msgItmParams.climate === undefined ? 5 : msgItmParams.climate;
   itmN0 = msgItmParams.n0 === undefined ? 301 : msgItmParams.n0;
-  itmPol = msgItmParams.pol === 0 ? 0 : 1;
+  itmPol = msgItmParams.pol === 0 ? 0 : (msgItmParams.pol === 45 ? 45 : 1);
   itmEpsilon = msgItmParams.epsilon === undefined ? 15 : msgItmParams.epsilon;
   itmSigma = msgItmParams.sigma === undefined ? 0.008 : msgItmParams.sigma;
   itmMdvar = msgItmParams.mdvar === undefined ? 12 : msgItmParams.mdvar;
@@ -553,8 +553,7 @@ function processSlice(cells, totalCells) {
 
     var pathLoss;
     try {
-      var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
-      pathLoss = computeFn(
+      pathLoss = computePolarizedPathLoss(
         result.profile, result.spacingM, antennaHeight, sliceRxHeightM, freqMHz, itmParams
       );
     } catch (e) {
@@ -562,6 +561,40 @@ function processSlice(cells, totalCells) {
     }
 
     return txPowerDbW + effectiveTxGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
+  }
+
+  function computePolarizedPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz, itmParams) {
+    var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
+
+    if (itmParams.pol !== 45) {
+      return computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, itmParams);
+    }
+
+    var horizontalParams = cloneItmParams(itmParams);
+    horizontalParams.pol = 0;
+    var verticalParams = cloneItmParams(itmParams);
+    verticalParams.pol = 1;
+
+    var horizontalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, horizontalParams);
+    var verticalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, verticalParams);
+
+    // NTIA ITM only supports pure horizontal or vertical polarization.
+    // Use the midpoint between those two model outputs as a practical slant approximation.
+    return (horizontalLossDb + verticalLossDb) * 0.5;
+  }
+
+  function cloneItmParams(params) {
+    return {
+      climate: params.climate,
+      n0: params.n0,
+      pol: params.pol,
+      epsilon: params.epsilon,
+      sigma: params.sigma,
+      mdvar: params.mdvar,
+      time: params.time,
+      location: params.location,
+      situation: params.situation
+    };
   }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.
