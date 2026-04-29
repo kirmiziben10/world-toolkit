@@ -414,7 +414,16 @@ function handleStartInner(msg) {
   rxAntennaGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
   rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
   rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
-  itmPol = msg.itmParams && msg.itmParams.pol === 0 ? 0 : 1;
+  var msgItmParams = msg.itmParams || {};
+  itmClimate = msgItmParams.climate === undefined ? 5 : msgItmParams.climate;
+  itmN0 = msgItmParams.n0 === undefined ? 301 : msgItmParams.n0;
+  itmPol = msgItmParams.pol === 0 ? 0 : 1;
+  itmEpsilon = msgItmParams.epsilon === undefined ? 15 : msgItmParams.epsilon;
+  itmSigma = msgItmParams.sigma === undefined ? 0.008 : msgItmParams.sigma;
+  itmMdvar = msgItmParams.mdvar === undefined ? 12 : msgItmParams.mdvar;
+  itmTime = msgItmParams.time === undefined ? 50 : msgItmParams.time;
+  itmLocation = msgItmParams.location === undefined ? 50 : msgItmParams.location;
+  itmSituation = msgItmParams.situation === undefined ? 50 : msgItmParams.situation;
   txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
   txPatternHasOffsets = patternHasOffsets(txPattern);
   patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);

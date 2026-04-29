@@ -452,6 +452,56 @@
                       </select>
                     </div>
 
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioEnvironmentSection">Propagation environment</div>
+
+                    <div class="control-group control-group-full">
+                      <span class="label-text" data-i18n="radioClimate">Climate</span>
+                      <select id="radio-climate" class="radio-select">
+                        <option value="1" data-i18n="radioClimateEquatorial">Equatorial</option>
+                        <option value="2" data-i18n="radioClimateContinentalSubtropical">Continental Subtropical</option>
+                        <option value="3" data-i18n="radioClimateMaritimeSubtropical">Maritime Subtropical</option>
+                        <option value="4" data-i18n="radioClimateDesert">Desert</option>
+                        <option value="5" selected data-i18n="radioClimateContinentalTemperate">Continental Temperate</option>
+                        <option value="6" data-i18n="radioClimateMaritimeTemperateLand">Maritime Temperate, Over Land</option>
+                        <option value="7" data-i18n="radioClimateMaritimeTemperateSea">Maritime Temperate, Over Sea</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioSurfaceRefractivity">Surface Refractivity (N0)</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-n0" min="250" max="400" value="301" step="1">
+                        <span class="radio-unit">N</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioGroundType">Ground Type</span>
+                      <select id="radio-terrain-preset" class="radio-select">
+                        <option value="average" selected data-i18n="radioGroundAverage">Average Ground</option>
+                        <option value="good" data-i18n="radioGroundGood">Good Ground</option>
+                        <option value="poor" data-i18n="radioGroundPoor">Poor Ground</option>
+                        <option value="fresh" data-i18n="radioGroundFreshWater">Fresh Water</option>
+                        <option value="sea" data-i18n="radioGroundSeaWater">Sea Water</option>
+                        <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group" id="radio-terrain-epsilon-group" hidden>
+                      <span class="label-text" data-i18n="radioGroundPermittivity">Ground Permittivity</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-terrain-epsilon" min="1" max="100" value="15" step="0.1">
+                      </div>
+                    </div>
+
+                    <div class="control-group" id="radio-terrain-sigma-group" hidden>
+                      <span class="label-text" data-i18n="radioGroundConductivity">Ground Conductivity</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-terrain-sigma" min="0.0001" max="10" value="0.008" step="0.001">
+                        <span class="radio-unit">S/m</span>
+                      </div>
+                    </div>
+
                     <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioReceiverSection">Receiver</div>
 
                     <div class="control-group control-group-full">

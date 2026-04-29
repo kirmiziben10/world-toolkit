@@ -1861,7 +1861,9 @@ a.action-btn {
   line-height: 1.45;
 }
 #radio-frequency-custom-group[hidden],
-#radio-pattern-upload-group[hidden] { display: none; }
+#radio-pattern-upload-group[hidden],
+#radio-terrain-epsilon-group[hidden],
+#radio-terrain-sigma-group[hidden] { display: none; }
 .radio-warning[hidden] { display: none; }
 .radio-warning[data-level="high"] {
   border-color: rgba(196, 78, 43, 0.55);

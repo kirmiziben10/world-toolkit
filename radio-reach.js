@@ -30,6 +30,24 @@
   // ImageData (4 B/px) + band buffer (1 B/px) + canvas backing store (~4 B/px).
   var BITMAP_BYTES_PER_PIXEL = 9;
   var PROP_WORKER_COUNT = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+  var DEFAULT_ITM_PARAMS = {
+    climate: 5,
+    n0: 301,
+    pol: 1,
+    epsilon: 15,
+    sigma: 0.008,
+    mdvar: 12,
+    time: 50,
+    location: 50,
+    situation: 50,
+  };
+  var TERRAIN_PRESETS = {
+    average: { epsilon: 15, sigma: 0.008 },
+    good: { epsilon: 25, sigma: 0.02 },
+    poor: { epsilon: 4, sigma: 0.001 },
+    fresh: { epsilon: 80, sigma: 0.01 },
+    sea: { epsilon: 81, sigma: 5 },
+  };
 
   // Attribution strings
   var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -68,6 +86,9 @@
       frequencyCustomInput, txPowerInput, txGainInput,
       rxGainInput, rxHeightInput, rxHeightPresetSelect,
       rxSensitivityInput, rxSensitivityPresetSelect,
+      climateSelect, n0Input, terrainPresetSelect,
+      terrainEpsilonGroup, terrainEpsilonInput,
+      terrainSigmaGroup, terrainSigmaInput,
       patternPresetSelect, patternBearingInput, patternUploadGroup,
       patternUploadBtn, patternFileInput, patternFileStatusEl,
       resolutionSelect, sectorAngleInput,
@@ -110,6 +131,13 @@
     rxHeightPresetSelect = document.getElementById('radio-rx-height-preset');
     rxSensitivityInput = document.getElementById('radio-rx-sensitivity');
     rxSensitivityPresetSelect = document.getElementById('radio-rx-sensitivity-preset');
+    climateSelect = document.getElementById('radio-climate');
+    n0Input = document.getElementById('radio-n0');
+    terrainPresetSelect = document.getElementById('radio-terrain-preset');
+    terrainEpsilonGroup = document.getElementById('radio-terrain-epsilon-group');
+    terrainEpsilonInput = document.getElementById('radio-terrain-epsilon');
+    terrainSigmaGroup = document.getElementById('radio-terrain-sigma-group');
+    terrainSigmaInput = document.getElementById('radio-terrain-sigma');
     patternPresetSelect = document.getElementById('radio-pattern-preset');
     patternBearingInput = document.getElementById('radio-pattern-bearing');
     patternUploadGroup = document.getElementById('radio-pattern-upload-group');
@@ -154,6 +182,7 @@
     syncFastFillControl();
     initAdvancedSettings();
     initReceiverPresets();
+    initEnvironmentControls();
     initFrequencyControls();
     initPatternControls();
     updateEirpDisplay();
@@ -289,6 +318,16 @@
     bindPresetSelect(rxSensitivityInput, rxSensitivityPresetSelect, [-110, -116, -130, -140]);
   }
 
+  function initEnvironmentControls() {
+    if (terrainPresetSelect) {
+      terrainPresetSelect.addEventListener('change', function () {
+        updateEnvironmentUi();
+        refreshAnalysisUiState();
+      });
+    }
+    updateEnvironmentUi();
+  }
+
   function initPatternControls() {
     if (patternPresetSelect) {
       patternPresetSelect.addEventListener('change', function () {
@@ -311,6 +350,20 @@
     updateFrequencyUi();
   }
 
+  function updateEnvironmentUi() {
+    if (!terrainPresetSelect) return;
+
+    var isCustom = terrainPresetSelect.value === 'custom';
+    if (terrainEpsilonGroup) terrainEpsilonGroup.hidden = !isCustom;
+    if (terrainSigmaGroup) terrainSigmaGroup.hidden = !isCustom;
+
+    if (!isCustom) {
+      var preset = TERRAIN_PRESETS[terrainPresetSelect.value] || TERRAIN_PRESETS.average;
+      if (terrainEpsilonInput) terrainEpsilonInput.value = preset.epsilon;
+      if (terrainSigmaInput) terrainSigmaInput.value = preset.sigma;
+    }
+  }
+
   function updateFrequencyUi() {
     if (!frequencySelect || !frequencyCustomGroup) return;
     frequencyCustomGroup.hidden = frequencySelect.value !== 'custom';
@@ -327,6 +380,43 @@
 
   function supportsITMFrequency(freqMHz) {
     return freqMHz >= 20 && freqMHz <= 20000;
+  }
+
+  function getSelectedClimate() {
+    var climate = climateSelect ? parseInt(climateSelect.value, 10) : DEFAULT_ITM_PARAMS.climate;
+    if (climate < 1 || climate > 7 || isNaN(climate)) return DEFAULT_ITM_PARAMS.climate;
+    return climate;
+  }
+
+  function getSelectedTerrainParams() {
+    var presetKey = terrainPresetSelect ? terrainPresetSelect.value : 'average';
+    if (presetKey !== 'custom') {
+      return TERRAIN_PRESETS[presetKey] || TERRAIN_PRESETS.average;
+    }
+
+    var epsilon = clampNumber(terrainEpsilonInput.value, 1, 100, DEFAULT_ITM_PARAMS.epsilon);
+    var sigma = clampNumber(terrainSigmaInput.value, 0.0001, 10, DEFAULT_ITM_PARAMS.sigma);
+    if (terrainEpsilonInput) terrainEpsilonInput.value = epsilon;
+    if (terrainSigmaInput) terrainSigmaInput.value = sigma;
+    return { epsilon: epsilon, sigma: sigma };
+  }
+
+  function getItmParams() {
+    var terrain = getSelectedTerrainParams();
+    var n0 = clampNumber(n0Input.value, 250, 400, DEFAULT_ITM_PARAMS.n0);
+    if (n0Input) n0Input.value = n0;
+
+    return {
+      climate: getSelectedClimate(),
+      n0: n0,
+      pol: polarizationSelect && polarizationSelect.value === '0' ? 0 : DEFAULT_ITM_PARAMS.pol,
+      epsilon: terrain.epsilon,
+      sigma: terrain.sigma,
+      mdvar: DEFAULT_ITM_PARAMS.mdvar,
+      time: DEFAULT_ITM_PARAMS.time,
+      location: DEFAULT_ITM_PARAMS.location,
+      situation: DEFAULT_ITM_PARAMS.situation,
+    };
   }
 
   function handlePatternFileSelected() {
@@ -750,7 +840,7 @@
     var adaptiveCulling = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
     var fastFillEnabled = !!(fastFillCheck && fastFillCheck.checked && adaptiveCulling);
     var itmEngine = itmEngineSelect ? itmEngineSelect.value : 'wasm';
-    var itmPol = polarizationSelect && polarizationSelect.value === '0' ? 0 : 1;
+    var itmParams = getItmParams();
     var sectorConfig = getSectorConfig();
     var patternConfig = getPatternConfig();
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
@@ -846,9 +936,7 @@
       rxSensitivityDbW: rxSensitivityDbW,
       txPattern: patternConfig.pattern,
       patternBearingDeg: patternConfig.bearingDeg,
-      itmParams: {
-        pol: itmPol
-      },
+      itmParams: itmParams,
       unfiltered: unfiltered,
       itmEngine: itmEngine,
       radarSweep: radarSweep,
@@ -1804,15 +1892,20 @@
 
   function bindWarningInputs() {
     [antennaInput, radiusInput, txPowerInput, txGainInput, rxGainInput,
-     rxHeightInput, rxSensitivityInput, patternBearingInput,
-     frequencyCustomInput, sectorAngleInput].forEach(function (el) {
+     rxHeightInput, rxSensitivityInput, n0Input, terrainEpsilonInput,
+     terrainSigmaInput, patternBearingInput, frequencyCustomInput,
+     sectorAngleInput].forEach(function (el) {
       if (!el) return;
       el.addEventListener('input', refreshAnalysisUiState);
       el.addEventListener('change', refreshAnalysisUiState);
     });
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
-     itmEngineSelect, rxHeightPresetSelect, rxSensitivityPresetSelect,
-     patternPresetSelect].forEach(function (el) {
+     itmEngineSelect, polarizationSelect, climateSelect, terrainPresetSelect,
+     rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('change', refreshAnalysisUiState);
+    });
+    [rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });
