@@ -64,7 +64,8 @@
   var coordsEl, instructionEl, warningEl, analyzeBtnEl, clearBtnEl,
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl, eirpDisplayEl,
-      antennaInput, radiusInput, frequencySelect, txPowerInput, txGainInput,
+      antennaInput, radiusInput, frequencySelect, frequencyCustomGroup,
+      frequencyCustomInput, txPowerInput, txGainInput,
       rxGainInput, rxHeightInput, rxHeightPresetSelect,
       rxSensitivityInput, rxSensitivityPresetSelect,
       patternPresetSelect, patternBearingInput, patternUploadGroup,
@@ -98,6 +99,8 @@
     radiusInput = document.getElementById('radio-radius');
     sectorAngleInput = document.getElementById('radio-sector-angle');
     frequencySelect = document.getElementById('radio-frequency');
+    frequencyCustomGroup = document.getElementById('radio-frequency-custom-group');
+    frequencyCustomInput = document.getElementById('radio-frequency-custom');
     resolutionSelect = document.getElementById('radio-resolution');
     txPowerInput = document.getElementById('radio-tx-power');
     txGainInput = document.getElementById('radio-tx-gain');
@@ -149,6 +152,7 @@
     syncFastFillControl();
     initAdvancedSettings();
     initReceiverPresets();
+    initFrequencyControls();
     initPatternControls();
     updateEirpDisplay();
     updateTerrainCreditHtml();
@@ -299,6 +303,28 @@
     }
 
     updatePatternUi();
+  }
+
+  function initFrequencyControls() {
+    updateFrequencyUi();
+  }
+
+  function updateFrequencyUi() {
+    if (!frequencySelect || !frequencyCustomGroup) return;
+    frequencyCustomGroup.hidden = frequencySelect.value !== 'custom';
+  }
+
+  function getSelectedFrequencyMHz() {
+    if (frequencySelect && frequencySelect.value === 'custom') {
+      var customMHz = clampNumber(frequencyCustomInput.value, 0.1, 20000, 144);
+      if (frequencyCustomInput) frequencyCustomInput.value = customMHz;
+      return customMHz;
+    }
+    return parseFloat(frequencySelect.value);
+  }
+
+  function supportsITMFrequency(freqMHz) {
+    return freqMHz >= 20 && freqMHz <= 20000;
   }
 
   function handlePatternFileSelected() {
@@ -588,7 +614,7 @@
     var txGainDbi = clampNumber(txGainInput.value, -10, 30, 0);
     var rxGainDbi = clampNumber(rxGainInput.value, -10, 30, 0);
     var rxSensitivityDbW = clampNumber(rxSensitivityInput.value, -150, -50, -110) - 30;
-    var freqMHz = parseFloat(frequencySelect.value);
+    var freqMHz = getSelectedFrequencyMHz();
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
     var powerLimitM = freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW);
 
@@ -716,7 +742,7 @@
     var rxHeightM = clampNumber(rxHeightInput.value, 0, 100, 2);
     var rxSensitivityDbm = clampNumber(rxSensitivityInput.value, -150, -50, -110);
     var rxSensitivityDbW = rxSensitivityDbm - 30;
-    var freqMHz = parseFloat(frequencySelect.value);
+    var freqMHz = getSelectedFrequencyMHz();
     var unfiltered = !!(unfilteredCheck && unfilteredCheck.checked);
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
     var adaptiveCulling = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
@@ -751,7 +777,7 @@
       rxSensitivityDbW,
       radarSweep
     );
-    renderAnalysisWarning(memoryEstimate, radarSweep, resVal);
+    renderAnalysisWarning(memoryEstimate, radarSweep, resVal, freqMHz);
 
     var analysisToken = beginAnalysisSession();
 
@@ -1770,7 +1796,8 @@
 
   function bindWarningInputs() {
     [antennaInput, radiusInput, txPowerInput, txGainInput, rxGainInput,
-     rxHeightInput, rxSensitivityInput, patternBearingInput, sectorAngleInput].forEach(function (el) {
+     rxHeightInput, rxSensitivityInput, patternBearingInput,
+     frequencyCustomInput, sectorAngleInput].forEach(function (el) {
       if (!el) return;
       el.addEventListener('input', refreshAnalysisUiState);
       el.addEventListener('change', refreshAnalysisUiState);
@@ -1781,6 +1808,9 @@
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });
+    if (frequencySelect) {
+      frequencySelect.addEventListener('change', updateFrequencyUi);
+    }
     if (adaptiveCullingCheck) {
       adaptiveCullingCheck.addEventListener('change', syncFastFillControl);
     }
@@ -1960,7 +1990,7 @@
     var txGainDbi = clampNumber(txGainInput.value, -10, 30, 0);
     var rxGainDbi = clampNumber(rxGainInput.value, -10, 30, 0);
     var rxSensitivityDbW = clampNumber(rxSensitivityInput.value, -150, -50, -110) - 30;
-    var freqMHz = parseFloat(frequencySelect.value);
+    var freqMHz = getSelectedFrequencyMHz();
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
     var analysisZoom = resVal === 'auto'
@@ -1978,13 +2008,15 @@
       radarSweep
     );
 
-    renderAnalysisWarning(memoryEstimate, radarSweep, resVal);
+    renderAnalysisWarning(memoryEstimate, radarSweep, resVal, freqMHz);
   }
 
-  function renderAnalysisWarning(memoryEstimate, radarSweep, resVal) {
+  function renderAnalysisWarning(memoryEstimate, radarSweep, resVal, freqMHz) {
     if (!warningEl) return;
 
-    var shouldWarn = memoryEstimate.risk !== 'ok' || shouldWarnForLargeManualRun(memoryEstimate, radarSweep, resVal);
+    var lowFreqWarning = supportsITMFrequency(freqMHz) ? '' : t('radioLowFreqFallbackWarning');
+    var memoryWarning = memoryEstimate.risk !== 'ok' || shouldWarnForLargeManualRun(memoryEstimate, radarSweep, resVal);
+    var shouldWarn = !!lowFreqWarning || memoryWarning;
     if (!shouldWarn) {
       warningEl.hidden = true;
       warningEl.textContent = '';
@@ -1992,18 +2024,24 @@
       return;
     }
 
-    if (memoryEstimate.bitmapMB > MAX_BITMAP_MB || memoryEstimate.risk === 'block') {
+    if (memoryWarning && (memoryEstimate.bitmapMB > MAX_BITMAP_MB || memoryEstimate.risk === 'block')) {
       warningEl.textContent = t('radioMemoryGuardrail', {
         mb: Math.round(memoryEstimate.totalMB),
         bitmapMb: Math.round(memoryEstimate.bitmapMB),
         ramGb: memoryEstimate.availableMemoryGB !== null ? memoryEstimate.availableMemoryGB.toFixed(1) : '?'
       });
+      if (lowFreqWarning) {
+        warningEl.textContent += ' ' + lowFreqWarning;
+      }
       warningEl.dataset.level = 'high';
       warningEl.hidden = false;
       return;
     }
 
-    warningEl.textContent = buildMemoryWarningText(memoryEstimate, radarSweep, resVal);
+    warningEl.textContent = memoryWarning ? buildMemoryWarningText(memoryEstimate, radarSweep, resVal) : lowFreqWarning;
+    if (memoryWarning && lowFreqWarning) {
+      warningEl.textContent += ' ' + lowFreqWarning;
+    }
     warningEl.dataset.level = 'warn';
     warningEl.hidden = false;
   }

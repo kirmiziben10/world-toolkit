@@ -383,9 +383,32 @@
             <div class="control-group">
               <span class="label-text" data-i18n="radioFrequency">Frequency</span>
               <select id="radio-frequency" class="radio-select">
-                <option value="144" selected data-i18n="radioFreqVHF">VHF 2m (144 MHz)</option>
-                <option value="430" data-i18n="radioFreqUHF">UHF 70cm (430 MHz)</option>
+                <option value="1.8" data-i18n="radioFreq160m">160m (1.8 MHz)</option>
+                <option value="3.5" data-i18n="radioFreq80m">80m (3.5 MHz)</option>
+                <option value="7" data-i18n="radioFreq40m">40m (7 MHz)</option>
+                <option value="10.1" data-i18n="radioFreq30m">30m (10.1 MHz)</option>
+                <option value="14" data-i18n="radioFreq20m">20m (14 MHz)</option>
+                <option value="18.1" data-i18n="radioFreq17m">17m (18.1 MHz)</option>
+                <option value="21" data-i18n="radioFreq15m">15m (21 MHz)</option>
+                <option value="24.9" data-i18n="radioFreq12m">12m (24.9 MHz)</option>
+                <option value="28" data-i18n="radioFreq10m">10m (28 MHz)</option>
+                <option value="50" data-i18n="radioFreq6m">6m (50 MHz)</option>
+                <option value="144" selected data-i18n="radioFreq2m">2m (144 MHz)</option>
+                <option value="222" data-i18n="radioFreq125m">1.25m (222 MHz)</option>
+                <option value="430" data-i18n="radioFreq70cm">70cm (430 MHz)</option>
+                <option value="902" data-i18n="radioFreq33cm">33cm (902 MHz)</option>
+                <option value="1296" data-i18n="radioFreq23cm">23cm (1296 MHz)</option>
+                <option value="2400" data-i18n="radioFreq13cm">13cm (2400 MHz)</option>
+                <option value="custom" data-i18n="radioFreqCustom">Custom…</option>
               </select>
+            </div>
+
+            <div class="control-group" id="radio-frequency-custom-group" hidden>
+              <span class="label-text" data-i18n="radioCustomFrequency">Custom Frequency</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-frequency-custom" min="0.1" max="20000" value="144" step="0.1">
+                <span class="radio-unit">MHz</span>
+              </div>
             </div>
 
             <div class="control-group control-group-full">

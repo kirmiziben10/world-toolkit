@@ -532,6 +532,12 @@ function processSlice(cells, totalCells) {
       return txPowerDbW + effectiveTxGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
     }
 
+    // ITM is validated for 20 MHz to 20 GHz. Below 20 MHz, keep the
+    // analysis running with a free-space-only fallback instead of failing.
+    if (freqMHz < 20) {
+      return txPowerDbW + effectiveTxGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
+    }
+
     var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
     if (!result) return -Infinity;
 
