@@ -414,6 +414,7 @@ function handleStartInner(msg) {
   rxAntennaGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
   rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
   rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
+  itmPol = msg.itmParams && msg.itmParams.pol === 0 ? 0 : 1;
   txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
   txPatternHasOffsets = patternHasOffsets(txPattern);
   patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);

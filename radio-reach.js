@@ -74,6 +74,7 @@
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
       radarSweepCheck, adaptiveCullingCheck, fastFillCheck,
       clearDirectionBtn, fastFillLabelEl, radioTerrainCreditEl, itmEngineSelect,
+      polarizationSelect,
       advancedSettingsEl, debugDownloadedTilesCheck, debugSkippedTilesCheck,
       debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck;
 
@@ -126,6 +127,7 @@
     clearDirectionBtn = document.getElementById('radio-clear-direction');
     radioTerrainCreditEl = document.getElementById('radio-terrain-credit');
     itmEngineSelect = document.getElementById('radio-itm-engine');
+    polarizationSelect = document.getElementById('radio-polarization');
     advancedSettingsEl = document.getElementById('radio-advanced-settings');
     debugDownloadedTilesCheck = document.getElementById('radio-debug-downloaded-tiles');
     debugSkippedTilesCheck = document.getElementById('radio-debug-skipped-tiles');
@@ -748,6 +750,7 @@
     var adaptiveCulling = !!(adaptiveCullingCheck && adaptiveCullingCheck.checked);
     var fastFillEnabled = !!(fastFillCheck && fastFillCheck.checked && adaptiveCulling);
     var itmEngine = itmEngineSelect ? itmEngineSelect.value : 'wasm';
+    var itmPol = polarizationSelect && polarizationSelect.value === '0' ? 0 : 1;
     var sectorConfig = getSectorConfig();
     var patternConfig = getPatternConfig();
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
@@ -843,6 +846,9 @@
       rxSensitivityDbW: rxSensitivityDbW,
       txPattern: patternConfig.pattern,
       patternBearingDeg: patternConfig.bearingDeg,
+      itmParams: {
+        pol: itmPol
+      },
       unfiltered: unfiltered,
       itmEngine: itmEngine,
       radarSweep: radarSweep,
@@ -1169,6 +1175,7 @@
           rxSensitivityDbW: txParams.rxSensitivityDbW,
           txPattern: txParams.txPattern,
           patternBearingDeg: txParams.patternBearingDeg,
+          itmParams: txParams.itmParams,
           zoom: txParams.zoom,
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered,
@@ -1236,6 +1243,7 @@
         rxSensitivityDbW: txParams.rxSensitivityDbW,
         txPattern: txParams.txPattern,
         patternBearingDeg: txParams.patternBearingDeg,
+        itmParams: txParams.itmParams,
         zoom: txParams.zoom,
         mpp: txParams.mpp,
         unfiltered: radioState._unfiltered,

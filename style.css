@@ -1860,6 +1860,8 @@ a.action-btn {
   font-size: 12px;
   line-height: 1.45;
 }
+#radio-frequency-custom-group[hidden],
+#radio-pattern-upload-group[hidden] { display: none; }
 .radio-warning[hidden] { display: none; }
 .radio-warning[data-level="high"] {
   border-color: rgba(196, 78, 43, 0.55);
