@@ -42,6 +42,8 @@ var txGainDbi = 0;
 var rxGainDbi = 0;
 var rxHeightM = DEFAULT_RX_HEIGHT_M;
 var rxSensitivityDbW = DEFAULT_RX_SENSITIVITY_DBW;
+var txPattern = null;
+var patternBearingDeg = 0;
 var unfilteredMode = false;
 var itmEngine = 'wasm';
 var radarSweep = false;
@@ -285,6 +287,8 @@ function handleStart(msg) {
   rxGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
   rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
   rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
+  txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
+  patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);
   unfilteredMode = msg.unfiltered || false;
   itmEngine = msg.itmEngine || 'wasm';
   radarSweep = msg.radarSweep || false;
@@ -626,6 +630,8 @@ function runPhase3(mask, mw, mh, totalCells) {
       rxGainDbi: rxGainDbi,
       rxHeightM: rxHeightM,
       rxSensitivityDbW: rxSensitivityDbW,
+      txPattern: txPattern,
+      patternBearingDeg: patternBearingDeg,
       zoom: zoom,
       mpp: mpp,
       unfiltered: unfilteredMode,
@@ -728,6 +734,8 @@ function sendWedgePartition(mask, mw, mh, totalCells) {
       rxGainDbi: rxGainDbi,
       rxHeightM: rxHeightM,
       rxSensitivityDbW: rxSensitivityDbW,
+      txPattern: txPattern,
+      patternBearingDeg: patternBearingDeg,
       zoom: zoom,
       mpp: mpp,
       unfiltered: unfilteredMode,

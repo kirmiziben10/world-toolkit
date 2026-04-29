@@ -55,6 +55,9 @@
     analysisTileKeys: null,
     debugRefreshQueued: false,
     debugTileRecords: null,
+    customPattern: null,
+    customPatternName: '',
+    customPatternInvalid: false,
   };
 
   // ===== DOM refs (cached on init) =====
@@ -64,6 +67,8 @@
       antennaInput, radiusInput, frequencySelect, txPowerInput, txGainInput,
       rxGainInput, rxHeightInput, rxHeightPresetSelect,
       rxSensitivityInput, rxSensitivityPresetSelect,
+      patternPresetSelect, patternBearingInput, patternUploadGroup,
+      patternUploadBtn, patternFileInput, patternFileStatusEl,
       resolutionSelect, sectorAngleInput,
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
       radarSweepCheck, adaptiveCullingCheck, fastFillCheck,
@@ -101,6 +106,12 @@
     rxHeightPresetSelect = document.getElementById('radio-rx-height-preset');
     rxSensitivityInput = document.getElementById('radio-rx-sensitivity');
     rxSensitivityPresetSelect = document.getElementById('radio-rx-sensitivity-preset');
+    patternPresetSelect = document.getElementById('radio-pattern-preset');
+    patternBearingInput = document.getElementById('radio-pattern-bearing');
+    patternUploadGroup = document.getElementById('radio-pattern-upload-group');
+    patternUploadBtn = document.getElementById('radio-pattern-upload-btn');
+    patternFileInput = document.getElementById('radio-pattern-file');
+    patternFileStatusEl = document.getElementById('radio-pattern-file-status');
     legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
@@ -127,13 +138,18 @@
     document.getElementById('radio-close-stats').addEventListener('click', function () {
       statsPanelEl.hidden = true;
     });
-    document.addEventListener('i18n:changed', updateTerrainCreditHtml);
+    document.addEventListener('i18n:changed', function () {
+      updateTerrainCreditHtml();
+      updatePatternUi();
+      updateEirpDisplay();
+    });
 
     bindWarningInputs();
     bindDebugInputs();
     syncFastFillControl();
     initAdvancedSettings();
     initReceiverPresets();
+    initPatternControls();
     updateEirpDisplay();
     updateTerrainCreditHtml();
     updateAnalysisWarning();
@@ -265,6 +281,164 @@
   function initReceiverPresets() {
     bindPresetSelect(rxHeightInput, rxHeightPresetSelect, [1.5, 2, 10, 30]);
     bindPresetSelect(rxSensitivityInput, rxSensitivityPresetSelect, [-110, -116, -130, -140]);
+  }
+
+  function initPatternControls() {
+    if (patternPresetSelect) {
+      patternPresetSelect.addEventListener('change', function () {
+        updatePatternUi();
+        refreshAnalysisUiState();
+      });
+    }
+
+    if (patternUploadBtn && patternFileInput) {
+      patternUploadBtn.addEventListener('click', function () {
+        patternFileInput.click();
+      });
+      patternFileInput.addEventListener('change', handlePatternFileSelected);
+    }
+
+    updatePatternUi();
+  }
+
+  function handlePatternFileSelected() {
+    if (!patternFileInput || !patternFileInput.files || !patternFileInput.files[0]) return;
+
+    var file = patternFileInput.files[0];
+    var reader = new FileReader();
+
+    reader.onload = function () {
+      try {
+        radioState.customPattern = parseCustomPattern(String(reader.result || ''));
+        radioState.customPatternName = file.name;
+        radioState.customPatternInvalid = false;
+      } catch (err) {
+        radioState.customPattern = null;
+        radioState.customPatternName = '';
+        radioState.customPatternInvalid = true;
+      }
+
+      patternFileInput.value = '';
+      updatePatternUi();
+      refreshAnalysisUiState();
+    };
+
+    reader.onerror = function () {
+      radioState.customPattern = null;
+      radioState.customPatternName = '';
+      radioState.customPatternInvalid = true;
+      patternFileInput.value = '';
+      updatePatternUi();
+    };
+
+    reader.readAsText(file);
+  }
+
+  function parseCustomPattern(text) {
+    var lines = text.split(/\r?\n/).map(function (line) {
+      return line.trim();
+    }).filter(function (line) {
+      return line.length > 0;
+    });
+
+    if (lines.length !== 360) {
+      throw new Error('Expected 360 numeric lines');
+    }
+
+    var pattern = new Float32Array(360);
+    for (var i = 0; i < 360; i++) {
+      var value = parseFloat(lines[i]);
+      if (!isFinite(value)) {
+        throw new Error('Invalid numeric value at line ' + (i + 1));
+      }
+      pattern[i] = value;
+    }
+
+    return pattern;
+  }
+
+  function updatePatternUi() {
+    if (!patternPresetSelect) return;
+
+    var isCustom = patternPresetSelect.value === 'custom';
+    if (patternUploadGroup) {
+      patternUploadGroup.hidden = !isCustom;
+    }
+    if (!patternFileStatusEl) return;
+
+    if (!isCustom) {
+      patternFileStatusEl.hidden = true;
+      patternFileStatusEl.textContent = '';
+      return;
+    }
+
+    patternFileStatusEl.hidden = false;
+    if (radioState.customPatternInvalid) {
+      patternFileStatusEl.textContent = t('radioPatternInvalid');
+    } else if (radioState.customPattern && radioState.customPatternName) {
+      patternFileStatusEl.textContent = t('radioPatternLoaded', { name: radioState.customPatternName });
+    } else {
+      patternFileStatusEl.textContent = t('radioPatternAwaitingFile');
+    }
+  }
+
+  function getPatternConfig() {
+    var preset = patternPresetSelect ? patternPresetSelect.value : 'omni';
+    var bearingDeg = patternBearingInput ? clampNumber(patternBearingInput.value, 0, 359, 0) : 0;
+    if (patternBearingInput) patternBearingInput.value = bearingDeg;
+
+    return {
+      preset: preset,
+      bearingDeg: bearingDeg,
+      pattern: buildPatternForPreset(preset)
+    };
+  }
+
+  function buildPatternForPreset(preset) {
+    if (preset === 'custom') {
+      return radioState.customPattern ? new Float32Array(radioState.customPattern) : createOmniPattern();
+    }
+    if (preset === 'dipole') return createDipolePattern();
+    if (preset === 'yagi3') return createYagi3Pattern();
+    if (preset === 'yagi5') return createYagi5Pattern();
+    if (preset === 'cardioid') return createCardioidPattern();
+    return createOmniPattern();
+  }
+
+  function createPattern(generator) {
+    var pattern = new Float32Array(360);
+    for (var deg = 0; deg < 360; deg++) {
+      pattern[deg] = generator(deg * Math.PI / 180, deg);
+    }
+    return pattern;
+  }
+
+  function createOmniPattern() {
+    return new Float32Array(360);
+  }
+
+  function createDipolePattern() {
+    return createPattern(function (rad) {
+      return -40 * Math.pow(Math.sin(rad), 2);
+    });
+  }
+
+  function createYagi3Pattern() {
+    return createPattern(function (rad) {
+      return -Math.min(22, 18 * Math.pow(Math.sin(rad / 2), 2) + 4 * Math.pow(Math.sin(rad), 2));
+    });
+  }
+
+  function createYagi5Pattern() {
+    return createPattern(function (rad) {
+      return -Math.min(28, 24 * Math.pow(Math.sin(rad / 2), 2) + 10 * Math.pow(Math.sin(rad), 4));
+    });
+  }
+
+  function createCardioidPattern() {
+    return createPattern(function (rad) {
+      return -20 * Math.pow(Math.sin(rad / 2), 2);
+    });
   }
 
   function bindPresetSelect(inputEl, selectEl, presetValues) {
@@ -549,6 +723,7 @@
     var fastFillEnabled = !!(fastFillCheck && fastFillCheck.checked && adaptiveCulling);
     var itmEngine = itmEngineSelect ? itmEngineSelect.value : 'wasm';
     var sectorConfig = getSectorConfig();
+    var patternConfig = getPatternConfig();
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
     var analysisZoom;
     if (resVal === 'auto') {
@@ -640,6 +815,8 @@
       rxGainDbi: rxGainDbi,
       rxHeightM: rxHeightM,
       rxSensitivityDbW: rxSensitivityDbW,
+      txPattern: patternConfig.pattern,
+      patternBearingDeg: patternConfig.bearingDeg,
       unfiltered: unfiltered,
       itmEngine: itmEngine,
       radarSweep: radarSweep,
@@ -964,6 +1141,8 @@
           rxGainDbi: txParams.rxGainDbi,
           rxHeightM: txParams.rxHeightM,
           rxSensitivityDbW: txParams.rxSensitivityDbW,
+          txPattern: txParams.txPattern,
+          patternBearingDeg: txParams.patternBearingDeg,
           zoom: txParams.zoom,
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered,
@@ -1029,6 +1208,8 @@
         rxGainDbi: txParams.rxGainDbi,
         rxHeightM: txParams.rxHeightM,
         rxSensitivityDbW: txParams.rxSensitivityDbW,
+        txPattern: txParams.txPattern,
+        patternBearingDeg: txParams.patternBearingDeg,
         zoom: txParams.zoom,
         mpp: txParams.mpp,
         unfiltered: radioState._unfiltered,
@@ -1589,13 +1770,14 @@
 
   function bindWarningInputs() {
     [antennaInput, radiusInput, txPowerInput, txGainInput, rxGainInput,
-     rxHeightInput, rxSensitivityInput, sectorAngleInput].forEach(function (el) {
+     rxHeightInput, rxSensitivityInput, patternBearingInput, sectorAngleInput].forEach(function (el) {
       if (!el) return;
       el.addEventListener('input', refreshAnalysisUiState);
       el.addEventListener('change', refreshAnalysisUiState);
     });
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
-     itmEngineSelect, rxHeightPresetSelect, rxSensitivityPresetSelect].forEach(function (el) {
+     itmEngineSelect, rxHeightPresetSelect, rxSensitivityPresetSelect,
+     patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });

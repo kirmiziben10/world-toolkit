@@ -461,6 +461,36 @@
                       </div>
                     </div>
 
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioPatternSection">Antenna pattern</div>
+
+                    <div class="control-group control-group-full">
+                      <span class="label-text" data-i18n="radioPatternPreset">Pattern Preset</span>
+                      <select id="radio-pattern-preset" class="radio-select">
+                        <option value="omni" selected data-i18n="radioPatternOmni">Omnidirectional</option>
+                        <option value="dipole" data-i18n="radioPatternDipole">Dipole (horizontal)</option>
+                        <option value="yagi3" data-i18n="radioPatternYagi3">3-element Yagi</option>
+                        <option value="yagi5" data-i18n="radioPatternYagi5">5-element Yagi</option>
+                        <option value="cardioid" data-i18n="radioPatternCardioid">Cardioid</option>
+                        <option value="custom" data-i18n="radioPatternCustom">Custom (upload .az file)</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioPatternDirection">Pattern Direction</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-pattern-bearing" min="0" max="359" value="0" step="1">
+                        <span class="radio-unit">&deg;</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full" id="radio-pattern-upload-group" hidden>
+                      <div class="radio-input-row">
+                        <button id="radio-pattern-upload-btn" type="button" class="xp-secondary-btn radio-secondary-btn" data-i18n="radioPatternUpload">Upload .az file</button>
+                        <input type="file" id="radio-pattern-file" accept=".az,text/plain" hidden>
+                      </div>
+                      <p id="radio-pattern-file-status" class="radio-subhint" hidden></p>
+                    </div>
+
                     <div class="control-group control-group-full">
                       <label class="radio-checkbox-label">
                         <input type="checkbox" id="radio-radar-sweep">

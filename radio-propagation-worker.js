@@ -28,6 +28,9 @@ var txAntennaGainDbi = 0;
 var rxAntennaGainDbi = 0;
 var rxHeightM = DEFAULT_RX_HEIGHT_M;
 var rxSensitivityDbW = DEFAULT_RX_SENSITIVITY_DBW;
+var txPattern = null;
+var txPatternHasOffsets = false;
+var patternBearingDeg = 0;
 var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
 var ADAPTIVE_FILL_MARGIN_DB = 28;
 var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
@@ -157,6 +160,30 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
           Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
           Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeBearingDeg(deg) {
+  deg = deg % 360;
+  return deg < 0 ? deg + 360 : deg;
+}
+
+function bearingFromTx(lat, lng) {
+  var toRad = Math.PI / 180;
+  var toDeg = 180 / Math.PI;
+  var dLng = (lng - txLng) * toRad;
+  var lat1 = txLat * toRad;
+  var lat2 = lat * toRad;
+  var y = Math.sin(dLng) * Math.cos(lat2);
+  var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return normalizeBearingDeg(Math.atan2(y, x) * toDeg);
+}
+
+function patternHasOffsets(pattern) {
+  if (!pattern || pattern.length !== 360) return false;
+  for (var i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== 0) return true;
+  }
+  return false;
 }
 
 var MAX_PROFILE_SAMPLES = 2048;
@@ -387,6 +414,9 @@ function handleStartInner(msg) {
   rxAntennaGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
   rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
   rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
+  txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
+  txPatternHasOffsets = patternHasOffsets(txPattern);
+  patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
@@ -479,6 +509,7 @@ function processSlice(cells, totalCells) {
 
   function evaluateCell(cell) {
     var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    var effectiveTxGainDbi = txGainDbi;
     var itmParams = {
       climate: itmClimate,
       n0: itmN0,
@@ -491,8 +522,14 @@ function processSlice(cells, totalCells) {
       situation: itmSituation
     };
 
+    if (txPatternHasOffsets) {
+      var azimuthDeg = bearingFromTx(cell.lat, cell.lng);
+      var patternIndex = normalizeBearingDeg(Math.round(azimuthDeg - patternBearingDeg));
+      effectiveTxGainDbi += txPattern[patternIndex] || 0;
+    }
+
     if (distM < mpp) {
-      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
+      return txPowerDbW + effectiveTxGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
     }
 
     var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
@@ -508,7 +545,7 @@ function processSlice(cells, totalCells) {
       return -Infinity;
     }
 
-    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
+    return txPowerDbW + effectiveTxGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
   }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.
