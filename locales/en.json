@@ -144,6 +144,7 @@
   "radioRxSensitivityPresetBase": "Base SSB -130 dBm",
   "radioRxSensitivityPresetWeak": "Weak signal / digital -140 dBm",
   "radioPresetCustom": "Custom",
+  "radioEirpDisplay": "EIRP: {{w}} W ({{dbw}} dBW)",
   "radioSweepMode": "Sweep mode",
   "radioAdaptiveCulling": "Adaptive culling",
   "radioFastFill": "Fast-fill strong blocks",

@@ -60,7 +60,7 @@
   // ===== DOM refs (cached on init) =====
   var coordsEl, instructionEl, warningEl, analyzeBtnEl, clearBtnEl,
       progressOverlayEl, progressBarEl, progressTextEl,
-      statsPanelEl, statsEl,
+      statsPanelEl, statsEl, eirpDisplayEl,
       antennaInput, radiusInput, frequencySelect, txPowerInput, txGainInput,
       rxGainInput, rxHeightInput, rxHeightPresetSelect,
       rxSensitivityInput, rxSensitivityPresetSelect,
@@ -88,6 +88,7 @@
     progressTextEl = document.getElementById('radio-progress-text');
     statsPanelEl = document.getElementById('radio-stats-panel');
     statsEl = document.getElementById('radio-stats');
+    eirpDisplayEl = document.getElementById('radio-eirp-display');
     antennaInput = document.getElementById('radio-antenna-height');
     radiusInput = document.getElementById('radio-radius');
     sectorAngleInput = document.getElementById('radio-sector-angle');
@@ -133,6 +134,7 @@
     syncFastFillControl();
     initAdvancedSettings();
     initReceiverPresets();
+    updateEirpDisplay();
     updateTerrainCreditHtml();
     updateAnalysisWarning();
 
@@ -297,8 +299,23 @@
   }
 
   function refreshAnalysisUiState() {
+    updateEirpDisplay();
     updateAnalysisWarning();
     updateDirectionPreview();
+  }
+
+  function updateEirpDisplay() {
+    if (!eirpDisplayEl) return;
+
+    var p = parseFloat(txPowerInput.value) || 0;
+    var g = parseFloat(txGainInput.value) || 0;
+    var eirpDbW = 10 * Math.log10(p) + g;
+    var eirpW = Math.pow(10, eirpDbW / 10);
+
+    eirpDisplayEl.textContent = t('radioEirpDisplay', {
+      w: eirpW.toFixed(1),
+      dbw: eirpDbW.toFixed(1)
+    });
   }
 
   // ===== Map Click Handler =====
@@ -546,6 +563,7 @@
     rxGainInput.value = rxGainDbi;
     rxHeightInput.value = rxHeightM;
     rxSensitivityInput.value = rxSensitivityDbm;
+    updateEirpDisplay();
 
     var memoryEstimate = estimateAnalysisMemoryMB(
       radioState.lat,

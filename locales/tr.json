@@ -144,6 +144,7 @@
   "radioRxSensitivityPresetBase": "Baz SSB -130 dBm",
   "radioRxSensitivityPresetWeak": "Zayıf sinyal / dijital -140 dBm",
   "radioPresetCustom": "Özel",
+  "radioEirpDisplay": "EIRP: {{w}} W ({{dbw}} dBW)",
   "radioSweepMode": "Tarama modu",
   "radioAdaptiveCulling": "Uyarlanabilir eleme",
   "radioFastFill": "Güçlü blokları hızlı doldur",

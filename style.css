@@ -1752,6 +1752,13 @@ a.action-btn {
   color: var(--text-muted);
 }
 
+.radio-inline-readout {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .terrain-credit,
 .radio-terrain-credit {
   margin-top: 10px;
