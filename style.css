@@ -1759,6 +1759,17 @@ a.action-btn {
   white-space: nowrap;
 }
 
+.radio-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.radio-slider-row input[type="range"] {
+  flex: 1;
+  margin: 0;
+}
+
 .terrain-credit,
 .radio-terrain-credit {
   margin-top: 10px;
@@ -1863,7 +1874,10 @@ a.action-btn {
 #radio-frequency-custom-group[hidden],
 #radio-pattern-upload-group[hidden],
 #radio-terrain-epsilon-group[hidden],
-#radio-terrain-sigma-group[hidden] { display: none; }
+#radio-terrain-sigma-group[hidden],
+#radio-stat-time-group[hidden],
+#radio-stat-location-group[hidden],
+#radio-stat-situation-group[hidden] { display: none; }
 .radio-warning[hidden] { display: none; }
 .radio-warning[data-level="high"] {
   border-color: rgba(196, 78, 43, 0.55);

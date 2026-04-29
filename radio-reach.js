@@ -48,6 +48,12 @@
     fresh: { epsilon: 80, sigma: 0.01 },
     sea: { epsilon: 81, sigma: 5 },
   };
+  var STATISTICAL_PRESETS = {
+    median: { time: 50, location: 50, situation: 50 },
+    'reliable-time': { time: 90, location: 50, situation: 50 },
+    'time-location': { time: 90, location: 90, situation: 50 },
+    conservative: { time: 90, location: 90, situation: 90 },
+  };
 
   // Attribution strings
   var OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -89,6 +95,9 @@
       climateSelect, n0Input, terrainPresetSelect,
       terrainEpsilonGroup, terrainEpsilonInput,
       terrainSigmaGroup, terrainSigmaInput,
+      statModeSelect, statTimeGroup, statTimeInput, statTimeValueEl,
+      statLocationGroup, statLocationInput, statLocationValueEl,
+      statSituationGroup, statSituationInput, statSituationValueEl,
       patternPresetSelect, patternBearingInput, patternUploadGroup,
       patternUploadBtn, patternFileInput, patternFileStatusEl,
       resolutionSelect, sectorAngleInput,
@@ -138,6 +147,16 @@
     terrainEpsilonInput = document.getElementById('radio-terrain-epsilon');
     terrainSigmaGroup = document.getElementById('radio-terrain-sigma-group');
     terrainSigmaInput = document.getElementById('radio-terrain-sigma');
+    statModeSelect = document.getElementById('radio-stat-mode');
+    statTimeGroup = document.getElementById('radio-stat-time-group');
+    statTimeInput = document.getElementById('radio-stat-time');
+    statTimeValueEl = document.getElementById('radio-stat-time-value');
+    statLocationGroup = document.getElementById('radio-stat-location-group');
+    statLocationInput = document.getElementById('radio-stat-location');
+    statLocationValueEl = document.getElementById('radio-stat-location-value');
+    statSituationGroup = document.getElementById('radio-stat-situation-group');
+    statSituationInput = document.getElementById('radio-stat-situation');
+    statSituationValueEl = document.getElementById('radio-stat-situation-value');
     patternPresetSelect = document.getElementById('radio-pattern-preset');
     patternBearingInput = document.getElementById('radio-pattern-bearing');
     patternUploadGroup = document.getElementById('radio-pattern-upload-group');
@@ -183,6 +202,7 @@
     initAdvancedSettings();
     initReceiverPresets();
     initEnvironmentControls();
+    initStatisticalControls();
     initFrequencyControls();
     initPatternControls();
     updateEirpDisplay();
@@ -328,6 +348,18 @@
     updateEnvironmentUi();
   }
 
+  function initStatisticalControls() {
+    if (statModeSelect) {
+      statModeSelect.addEventListener('change', updateStatisticalUi);
+    }
+    [statTimeInput, statLocationInput, statSituationInput].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('input', updateStatisticalReadouts);
+      el.addEventListener('change', updateStatisticalReadouts);
+    });
+    updateStatisticalUi();
+  }
+
   function initPatternControls() {
     if (patternPresetSelect) {
       patternPresetSelect.addEventListener('change', function () {
@@ -362,6 +394,30 @@
       if (terrainEpsilonInput) terrainEpsilonInput.value = preset.epsilon;
       if (terrainSigmaInput) terrainSigmaInput.value = preset.sigma;
     }
+  }
+
+  function updateStatisticalUi() {
+    if (!statModeSelect) return;
+
+    var isCustom = statModeSelect.value === 'custom';
+    if (statTimeGroup) statTimeGroup.hidden = !isCustom;
+    if (statLocationGroup) statLocationGroup.hidden = !isCustom;
+    if (statSituationGroup) statSituationGroup.hidden = !isCustom;
+
+    if (!isCustom) {
+      var preset = STATISTICAL_PRESETS[statModeSelect.value] || STATISTICAL_PRESETS.median;
+      if (statTimeInput) statTimeInput.value = preset.time;
+      if (statLocationInput) statLocationInput.value = preset.location;
+      if (statSituationInput) statSituationInput.value = preset.situation;
+    }
+
+    updateStatisticalReadouts();
+  }
+
+  function updateStatisticalReadouts() {
+    if (statTimeValueEl && statTimeInput) statTimeValueEl.textContent = statTimeInput.value + '%';
+    if (statLocationValueEl && statLocationInput) statLocationValueEl.textContent = statLocationInput.value + '%';
+    if (statSituationValueEl && statSituationInput) statSituationValueEl.textContent = statSituationInput.value + '%';
   }
 
   function updateFrequencyUi() {
@@ -401,8 +457,25 @@
     return { epsilon: epsilon, sigma: sigma };
   }
 
+  function getStatisticalParams() {
+    var presetKey = statModeSelect ? statModeSelect.value : 'median';
+    if (presetKey !== 'custom') {
+      return STATISTICAL_PRESETS[presetKey] || STATISTICAL_PRESETS.median;
+    }
+
+    var time = Math.round(clampNumber(statTimeInput.value, 1, 99, DEFAULT_ITM_PARAMS.time));
+    var location = Math.round(clampNumber(statLocationInput.value, 1, 99, DEFAULT_ITM_PARAMS.location));
+    var situation = Math.round(clampNumber(statSituationInput.value, 1, 99, DEFAULT_ITM_PARAMS.situation));
+    if (statTimeInput) statTimeInput.value = time;
+    if (statLocationInput) statLocationInput.value = location;
+    if (statSituationInput) statSituationInput.value = situation;
+    updateStatisticalReadouts();
+    return { time: time, location: location, situation: situation };
+  }
+
   function getItmParams() {
     var terrain = getSelectedTerrainParams();
+    var statistical = getStatisticalParams();
     var n0 = clampNumber(n0Input.value, 250, 400, DEFAULT_ITM_PARAMS.n0);
     if (n0Input) n0Input.value = n0;
 
@@ -413,9 +486,9 @@
       epsilon: terrain.epsilon,
       sigma: terrain.sigma,
       mdvar: DEFAULT_ITM_PARAMS.mdvar,
-      time: DEFAULT_ITM_PARAMS.time,
-      location: DEFAULT_ITM_PARAMS.location,
-      situation: DEFAULT_ITM_PARAMS.situation,
+      time: statistical.time,
+      location: statistical.location,
+      situation: statistical.situation,
     };
   }
 
@@ -1893,7 +1966,8 @@
   function bindWarningInputs() {
     [antennaInput, radiusInput, txPowerInput, txGainInput, rxGainInput,
      rxHeightInput, rxSensitivityInput, n0Input, terrainEpsilonInput,
-     terrainSigmaInput, patternBearingInput, frequencyCustomInput,
+     terrainSigmaInput, statTimeInput, statLocationInput,
+     statSituationInput, patternBearingInput, frequencyCustomInput,
      sectorAngleInput].forEach(function (el) {
       if (!el) return;
       el.addEventListener('input', refreshAnalysisUiState);
@@ -1901,6 +1975,7 @@
     });
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
      itmEngineSelect, polarizationSelect, climateSelect, terrainPresetSelect,
+     statModeSelect,
      rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
