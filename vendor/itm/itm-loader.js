@@ -2,7 +2,7 @@
  * ITM WASM Loader — async instantiation of the Emscripten WASM module.
  *
  * Provides loadITMWasm() which returns a Promise resolving to an object
- * with computeITMPathLossWasm(profile, spacingM, txHeightM, rxHeightM, freqMHz).
+ * with computeITMPathLossWasm(profile, spacingM, txHeightM, rxHeightM, freqMHz, params).
  *
  * CRITICAL: All WASM heap buffers are allocated ONCE at init time and reused
  * for every call. No malloc/free in the hot path.
@@ -12,17 +12,6 @@
  */
 (function () {
   'use strict';
-
-  // Hardcoded ITM parameters (must match itm-wrapper.js)
-  var CLIMATE    = 5;     // continental temperate
-  var N_0        = 301;   // standard refractivity
-  var POL        = 1;     // vertical polarization
-  var EPSILON    = 15;    // ground relative permittivity
-  var SIGMA      = 0.008; // ground conductivity
-  var MDVAR      = 12;    // broadcast mode
-  var TIME       = 50;    // median time
-  var LOCATION   = 50;    // median location
-  var SITUATION  = 50;    // median situation
 
   // Max profile buffer: 2048 samples + 2 header slots = 2050 doubles = 16400 bytes
   var MAX_PFL_SLOTS = 2050;
@@ -84,12 +73,24 @@
            * @param {number} txHeightM  - TX antenna height AGL
            * @param {number} rxHeightM  - RX antenna height AGL
            * @param {number} freqMHz    - Frequency in MHz
+           * @param {Object=} params   - Optional ITM environment/statistical parameters
            * @returns {number} Basic transmission loss in dB
            */
-          function computeITMPathLossWasm(profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+          function computeITMPathLossWasm(profile, spacingM, txHeightM, rxHeightM, freqMHz, params) {
             var nSamples = profile.length;
             var N = nSamples - 1; // number of intervals
             var pflLen = nSamples + 2; // [N, spacingM, elev0, ..., elevN]
+            params = params || {};
+
+            var climate = params.climate === undefined ? 5 : params.climate;
+            var n0 = params.n0 === undefined ? 301 : params.n0;
+            var pol = params.pol === undefined ? 1 : params.pol;
+            var epsilon = params.epsilon === undefined ? 15 : params.epsilon;
+            var sigma = params.sigma === undefined ? 0.008 : params.sigma;
+            var mdvar = params.mdvar === undefined ? 12 : params.mdvar;
+            var time = params.time === undefined ? 50 : params.time;
+            var location = params.location === undefined ? 50 : params.location;
+            var situation = params.situation === undefined ? 50 : params.situation;
 
             if (pflLen > MAX_PFL_SLOTS) {
               throw new Error('ITM profile too long: ' + nSamples + ' samples (max ' + (MAX_PFL_SLOTS - 2) + ')');
@@ -111,9 +112,9 @@
 
             var errCode = _ITM_P2P_TLS(
               txHeightM, rxHeightM, pflPtr,
-              CLIMATE, N_0, freqMHz,
-              POL, EPSILON, SIGMA,
-              MDVAR, TIME, LOCATION, SITUATION,
+              climate, n0, freqMHz,
+              pol, epsilon, sigma,
+              mdvar, time, location, situation,
               aDbPtr, warnPtr
             );
 

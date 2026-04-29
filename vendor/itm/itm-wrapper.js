@@ -57,13 +57,14 @@
    * @param {number} txHeightM  - TX antenna height above ground level, in meters
    * @param {number} rxHeightM  - RX antenna height above ground level, in meters
    * @param {number} freqMHz    - Frequency in MHz (20–20000)
+   * @param {Object=} params   - Optional ITM environment/statistical parameters
    * @returns {number} Basic transmission loss in dB
    */
-  function computeITMPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+  function computeITMPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz, params) {
     if (!ready) {
       throw new Error('ITM not initialized — call initITM() first.');
     }
-    return wasmComputeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz);
+    return wasmComputeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, params);
   }
 
   /**

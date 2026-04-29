@@ -15,6 +15,15 @@ var CHUNK_SIZE = 64;
 var COVERAGE_BATCH_SIZE = 500;
 var RX_HEIGHT_M = 2;
 var RX_SENSITIVITY_DBW = -140;
+var itmClimate = 5;
+var itmN0 = 301;
+var itmPol = 1;
+var itmEpsilon = 15;
+var itmSigma = 0.008;
+var itmMdvar = 12;
+var itmTime = 50;
+var itmLocation = 50;
+var itmSituation = 50;
 var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
 var ADAPTIVE_FILL_MARGIN_DB = 28;
 var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
@@ -296,22 +305,23 @@ function ensureJSReady() {
       return;
     }
 
-    // Hardcoded params matching the WASM loader
-    var CLIMATE   = 5;
-    var N_0       = 301;
-    var POL       = 1;
-    var EPSILON   = 15;
-    var SIGMA     = 0.008;
-    var MDVAR     = 12;
-    var TIME      = 50;
-    var LOCATION  = 50;
-    var SITUATION = 50;
-
     var itmRef = self.ITM;
 
-    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz, params) {
       var nSamples = profile.length;
       var N = nSamples - 1;
+      params = params || {};
+
+      var climate = params.climate === undefined ? 5 : params.climate;
+      var n0 = params.n0 === undefined ? 301 : params.n0;
+      var pol = params.pol === undefined ? 1 : params.pol;
+      var epsilon = params.epsilon === undefined ? 15 : params.epsilon;
+      var sigma = params.sigma === undefined ? 0.008 : params.sigma;
+      var mdvar = params.mdvar === undefined ? 12 : params.mdvar;
+      var time = params.time === undefined ? 50 : params.time;
+      var location = params.location === undefined ? 50 : params.location;
+      var situation = params.situation === undefined ? 50 : params.situation;
+
       // Build PFL array: [N, spacingM, elev0, ..., elevN]
       var pfl = new Array(nSamples + 2);
       pfl[0] = N;
@@ -322,9 +332,9 @@ function ensureJSReady() {
 
       var result = itmRef.ITM_P2P_TLS(
         txHeightM, rxHeightM, pfl,
-        CLIMATE, N_0, freqMHz,
-        POL, EPSILON, SIGMA,
-        MDVAR, TIME, LOCATION, SITUATION
+        climate, n0, freqMHz,
+        pol, epsilon, sigma,
+        mdvar, time, location, situation
       );
 
       if (result.error >= 1000) {
@@ -459,6 +469,18 @@ function processSlice(cells, totalCells) {
 
   function evaluateCell(cell) {
     var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    var itmParams = {
+      climate: itmClimate,
+      n0: itmN0,
+      pol: itmPol,
+      epsilon: itmEpsilon,
+      sigma: itmSigma,
+      mdvar: itmMdvar,
+      time: itmTime,
+      location: itmLocation,
+      situation: itmSituation
+    };
+
     if (distM < mpp) {
       return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - RX_SENSITIVITY_DBW;
     }
@@ -470,7 +492,7 @@ function processSlice(cells, totalCells) {
     try {
       var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
       pathLoss = computeFn(
-        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
+        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz, itmParams
       );
     } catch (e) {
       return -Infinity;
