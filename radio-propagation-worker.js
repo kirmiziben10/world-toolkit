@@ -13,8 +13,24 @@ var EARTH_RADIUS = 6378137;
 var MAX_TILES = 2000;
 var CHUNK_SIZE = 64;
 var COVERAGE_BATCH_SIZE = 500;
-var RX_HEIGHT_M = 2;
-var RX_SENSITIVITY_DBW = -140;
+var DEFAULT_RX_HEIGHT_M = 2;
+var DEFAULT_RX_SENSITIVITY_DBW = -140;
+var itmClimate = 5;
+var itmN0 = 301;
+var itmPol = 1;
+var itmEpsilon = 15;
+var itmSigma = 0.008;
+var itmMdvar = 12;
+var itmTime = 50;
+var itmLocation = 50;
+var itmSituation = 50;
+var txAntennaGainDbi = 0;
+var rxAntennaGainDbi = 0;
+var rxHeightM = DEFAULT_RX_HEIGHT_M;
+var rxSensitivityDbW = DEFAULT_RX_SENSITIVITY_DBW;
+var txPattern = null;
+var txPatternHasOffsets = false;
+var patternBearingDeg = 0;
 var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
 var ADAPTIVE_FILL_MARGIN_DB = 28;
 var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
@@ -144,6 +160,30 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
           Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
           Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeBearingDeg(deg) {
+  deg = deg % 360;
+  return deg < 0 ? deg + 360 : deg;
+}
+
+function bearingFromTx(lat, lng) {
+  var toRad = Math.PI / 180;
+  var toDeg = 180 / Math.PI;
+  var dLng = (lng - txLng) * toRad;
+  var lat1 = txLat * toRad;
+  var lat2 = lat * toRad;
+  var y = Math.sin(dLng) * Math.cos(lat2);
+  var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return normalizeBearingDeg(Math.atan2(y, x) * toDeg);
+}
+
+function patternHasOffsets(pattern) {
+  if (!pattern || pattern.length !== 360) return false;
+  for (var i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== 0) return true;
+  }
+  return false;
 }
 
 var MAX_PROFILE_SAMPLES = 2048;
@@ -296,22 +336,23 @@ function ensureJSReady() {
       return;
     }
 
-    // Hardcoded params matching the WASM loader
-    var CLIMATE   = 5;
-    var N_0       = 301;
-    var POL       = 1;
-    var EPSILON   = 15;
-    var SIGMA     = 0.008;
-    var MDVAR     = 12;
-    var TIME      = 50;
-    var LOCATION  = 50;
-    var SITUATION = 50;
-
     var itmRef = self.ITM;
 
-    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+    jsComputeFn = function (profile, spacingM, txHeightM, rxHeightM, freqMHz, params) {
       var nSamples = profile.length;
       var N = nSamples - 1;
+      params = params || {};
+
+      var climate = params.climate === undefined ? 5 : params.climate;
+      var n0 = params.n0 === undefined ? 301 : params.n0;
+      var pol = params.pol === undefined ? 1 : params.pol;
+      var epsilon = params.epsilon === undefined ? 15 : params.epsilon;
+      var sigma = params.sigma === undefined ? 0.008 : params.sigma;
+      var mdvar = params.mdvar === undefined ? 12 : params.mdvar;
+      var time = params.time === undefined ? 50 : params.time;
+      var location = params.location === undefined ? 50 : params.location;
+      var situation = params.situation === undefined ? 50 : params.situation;
+
       // Build PFL array: [N, spacingM, elev0, ..., elevN]
       var pfl = new Array(nSamples + 2);
       pfl[0] = N;
@@ -322,9 +363,9 @@ function ensureJSReady() {
 
       var result = itmRef.ITM_P2P_TLS(
         txHeightM, rxHeightM, pfl,
-        CLIMATE, N_0, freqMHz,
-        POL, EPSILON, SIGMA,
-        MDVAR, TIME, LOCATION, SITUATION
+        climate, n0, freqMHz,
+        pol, epsilon, sigma,
+        mdvar, time, location, situation
       );
 
       if (result.error >= 1000) {
@@ -369,6 +410,23 @@ function handleStartInner(msg) {
   antennaHeight = msg.antennaHeight;
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
+  txAntennaGainDbi = msg.txGainDbi === undefined ? 0 : msg.txGainDbi;
+  rxAntennaGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
+  rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
+  rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
+  var msgItmParams = msg.itmParams || {};
+  itmClimate = msgItmParams.climate === undefined ? 5 : msgItmParams.climate;
+  itmN0 = msgItmParams.n0 === undefined ? 301 : msgItmParams.n0;
+  itmPol = msgItmParams.pol === 0 ? 0 : (msgItmParams.pol === 45 ? 45 : 1);
+  itmEpsilon = msgItmParams.epsilon === undefined ? 15 : msgItmParams.epsilon;
+  itmSigma = msgItmParams.sigma === undefined ? 0.008 : msgItmParams.sigma;
+  itmMdvar = msgItmParams.mdvar === undefined ? 12 : msgItmParams.mdvar;
+  itmTime = msgItmParams.time === undefined ? 50 : msgItmParams.time;
+  itmLocation = msgItmParams.location === undefined ? 50 : msgItmParams.location;
+  itmSituation = msgItmParams.situation === undefined ? 50 : msgItmParams.situation;
+  txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
+  txPatternHasOffsets = patternHasOffsets(txPattern);
+  patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
@@ -414,8 +472,40 @@ function handleStartInner(msg) {
 
 function processSlice(cells, totalCells) {
   var txPowerDbW = 10 * Math.log10(txPowerW);
-  var txGainDbi = 0;
-  var rxGainDbi = 0;
+  var txGainDbi = txAntennaGainDbi;
+  var rxGainDbi = rxAntennaGainDbi;
+  var sliceRxHeightM = rxHeightM;
+  var sliceRxSensitivityDbW = rxSensitivityDbW;
+
+  // ITM parameters are constant for the whole slice — build the object(s) once.
+  var sliceItmParams = {
+    climate: itmClimate,
+    n0: itmN0,
+    pol: itmPol,
+    epsilon: itmEpsilon,
+    sigma: itmSigma,
+    mdvar: itmMdvar,
+    time: itmTime,
+    location: itmLocation,
+    situation: itmSituation
+  };
+  // For 45° slant we evaluate H and V then average; pre-build both variants.
+  var slantHorizontalParams = null;
+  var slantVerticalParams = null;
+  if (itmPol === 45) {
+    slantHorizontalParams = {
+      climate: itmClimate, n0: itmN0, pol: 0,
+      epsilon: itmEpsilon, sigma: itmSigma,
+      mdvar: itmMdvar, time: itmTime,
+      location: itmLocation, situation: itmSituation
+    };
+    slantVerticalParams = {
+      climate: itmClimate, n0: itmN0, pol: 1,
+      epsilon: itmEpsilon, sigma: itmSigma,
+      mdvar: itmMdvar, time: itmTime,
+      location: itmLocation, situation: itmSituation
+    };
+  }
 
   var evaluated = 0;
   // Binary batch buffer: Float32Array triples [fullBitmapX, fullBitmapY, band, ...]
@@ -459,8 +549,22 @@ function processSlice(cells, totalCells) {
 
   function evaluateCell(cell) {
     var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
+    var effectiveTxGainDbi = txGainDbi;
+
+    if (txPatternHasOffsets) {
+      var azimuthDeg = bearingFromTx(cell.lat, cell.lng);
+      var patternIndex = normalizeBearingDeg(Math.round(azimuthDeg - patternBearingDeg));
+      effectiveTxGainDbi += txPattern[patternIndex] || 0;
+    }
+
     if (distM < mpp) {
-      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - RX_SENSITIVITY_DBW;
+      return txPowerDbW + effectiveTxGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
+    }
+
+    // ITM is validated for 20 MHz to 20 GHz. Below 20 MHz, keep the
+    // analysis running with a free-space-only fallback instead of failing.
+    if (freqMHz < 20) {
+      return txPowerDbW + effectiveTxGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
     }
 
     var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
@@ -468,15 +572,28 @@ function processSlice(cells, totalCells) {
 
     var pathLoss;
     try {
-      var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
-      pathLoss = computeFn(
-        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz
+      pathLoss = computePolarizedPathLoss(
+        result.profile, result.spacingM, antennaHeight, sliceRxHeightM, freqMHz
       );
     } catch (e) {
       return -Infinity;
     }
 
-    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
+    return txPowerDbW + effectiveTxGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
+  }
+
+  function computePolarizedPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz) {
+    var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
+
+    if (sliceItmParams.pol !== 45) {
+      return computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, sliceItmParams);
+    }
+
+    // NTIA ITM only supports pure horizontal or vertical polarization.
+    // Use the midpoint between those two model outputs as a practical slant approximation.
+    var horizontalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, slantHorizontalParams);
+    var verticalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, slantVerticalParams);
+    return (horizontalLossDb + verticalLossDb) * 0.5;
   }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.

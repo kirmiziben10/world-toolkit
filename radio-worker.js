@@ -20,8 +20,8 @@ var LOS_BLOCK_MARGIN = 200;     // meters: Phase 1 only blocks if terrain exceed
 var BUFFER_KM = 4;              // dilation radius for Phase 2 mask
 var CHUNK_SIZE = 64;            // spatial chunk dimension for Phase 3 tile batching
 var COVERAGE_BATCH_SIZE = 500;  // emit coverageBatch every N evaluated cells
-var RX_HEIGHT_M = 2;            // receiver antenna height (handheld)
-var RX_SENSITIVITY_DBW = -140;  // receiver sensitivity in dBW (≈ -110 dBm)
+var DEFAULT_RX_HEIGHT_M = 2;            // receiver antenna height (handheld)
+var DEFAULT_RX_SENSITIVITY_DBW = -140;  // receiver sensitivity in dBW (≈ -110 dBm)
 var WEDGE_DEG = 10;             // degrees per radar sweep wedge
 
 // ===== Tile store =====
@@ -38,6 +38,13 @@ var antennaHeight = 10;
 var radiusM = 30000;
 var freqMHz = 144;
 var txPowerW = 5;
+var txGainDbi = 0;
+var rxGainDbi = 0;
+var rxHeightM = DEFAULT_RX_HEIGHT_M;
+var rxSensitivityDbW = DEFAULT_RX_SENSITIVITY_DBW;
+var itmParams = null;
+var txPattern = null;
+var patternBearingDeg = 0;
 var unfilteredMode = false;
 var itmEngine = 'wasm';
 var radarSweep = false;
@@ -277,6 +284,13 @@ function handleStart(msg) {
   mpp = metersPerPixel(txLat, zoom);
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
+  txGainDbi = msg.txGainDbi === undefined ? 0 : msg.txGainDbi;
+  rxGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
+  rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
+  rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
+  itmParams = msg.itmParams || null;
+  txPattern = msg.txPattern && msg.txPattern.length === 360 ? new Float32Array(msg.txPattern) : null;
+  patternBearingDeg = normalizeBearingDeg(msg.patternBearingDeg || 0);
   unfilteredMode = msg.unfiltered || false;
   itmEngine = msg.itmEngine || 'wasm';
   radarSweep = msg.radarSweep || false;
@@ -420,7 +434,7 @@ function runPhase1(callback) {
 function runPhase2Unfiltered(callback) {
   // Build a full circular mask with free-space distance clamping.
   // The mask covers all cells within the effective radius — no LOS pre-filter.
-  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW);
   var clampRadiusM = Math.min(radiusM, fsMaxM);
   var wasClamped = fsMaxM < radiusM;
 
@@ -456,15 +470,15 @@ function runPhase2Unfiltered(callback) {
   callback(mask, maskW, maskH, totalCells);
 }
 
-function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
-  var marginDb = 10 * Math.log10(txPowerW) + 140;
+function freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW) {
+  var marginDb = 10 * Math.log10(txPowerW) + txGainDbi + rxGainDbi - rxSensitivityDbW;
   var dKm = Math.pow(10, (marginDb - 32.45 - 20 * Math.log10(freqMHz)) / 20);
   return dKm * 1000;
 }
 
 function runPhase2(points, callback) {
   // 0. Compute free-space clamp radius
-  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW);
   var wasClamped = fsMaxM < radiusM;
   var clampRadiusM = Math.min(radiusM, fsMaxM);
 
@@ -614,6 +628,13 @@ function runPhase3(mask, mw, mh, totalCells) {
       antennaHeight: antennaHeight,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
+      txGainDbi: txGainDbi,
+      rxGainDbi: rxGainDbi,
+      rxHeightM: rxHeightM,
+      rxSensitivityDbW: rxSensitivityDbW,
+      itmParams: itmParams,
+      txPattern: txPattern,
+      patternBearingDeg: patternBearingDeg,
       zoom: zoom,
       mpp: mpp,
       unfiltered: unfilteredMode,
@@ -712,6 +733,13 @@ function sendWedgePartition(mask, mw, mh, totalCells) {
       antennaHeight: antennaHeight,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
+      txGainDbi: txGainDbi,
+      rxGainDbi: rxGainDbi,
+      rxHeightM: rxHeightM,
+      rxSensitivityDbW: rxSensitivityDbW,
+      itmParams: itmParams,
+      txPattern: txPattern,
+      patternBearingDeg: patternBearingDeg,
       zoom: zoom,
       mpp: mpp,
       unfiltered: unfilteredMode,
@@ -916,7 +944,7 @@ function buildWedgeMaskFromPoints(points, startDeg, endDeg, callback) {
   maxGY = Math.ceil(maxGY) + bufferPx;
 
   // Clamp to free-space max distance
-  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+  var fsMaxM = freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW);
   var clampRadiusM = Math.min(radiusM, fsMaxM);
   var clampPx = Math.ceil(clampRadiusM / mpp) + bufferPx;
   minGX = Math.max(minGX, Math.floor(txGX) - clampPx);

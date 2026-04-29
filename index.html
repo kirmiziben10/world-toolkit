@@ -330,6 +330,15 @@
         </svg>
       </div>
 
+      <div id="radio-pattern-map-control" class="radio-pattern-map-control" hidden>
+        <span class="radio-pattern-map-label" data-i18n="radioPatternDirection">Pattern Direction</span>
+        <div class="radio-pattern-map-actions">
+          <button id="radio-pattern-rotate-left" type="button" class="radio-pattern-map-btn">-15&deg;</button>
+          <span id="radio-pattern-map-readout" class="radio-pattern-map-readout">0&deg;</span>
+          <button id="radio-pattern-rotate-right" type="button" class="radio-pattern-map-btn">+15&deg;</button>
+        </div>
+      </div>
+
       <!-- Controls Panel (left sidebar) -->
       <aside id="radio-controls-panel">
         <div class="panel-content">
@@ -352,11 +361,34 @@
               <div class="radio-input-row">
                 <input type="number" id="radio-tx-power" min="0.1" max="100" value="5" step="0.1">
                 <span class="radio-unit">W</span>
+                <span id="radio-eirp-display" class="radio-inline-readout">EIRP: 5.0 W (7.0 dBW)</span>
               </div>
             </div>
 
+            <div class="control-group control-group-full" id="radio-tx-gain-group">
+              <div class="radio-label-row">
+                <span class="label-text" data-i18n="radioTxAntennaGain">TX Antenna Gain</span>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxAntennaGain,aria-label:radioHelpTxAntennaGain">?</button>
+              </div>
+              <div class="radio-input-row">
+                <input type="number" id="radio-tx-gain" min="-10" max="30" value="0" step="0.5">
+                <span class="radio-unit">dBi</span>
+              </div>
+              <div class="radio-checkbox-row radio-suboption">
+                <label class="radio-checkbox-label">
+                  <input type="checkbox" id="radio-tx-gain-auto" checked>
+                  <span data-i18n="radioTxGainUsePattern">Use typical gain from the selected pattern</span>
+                </label>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxGainAuto,aria-label:radioHelpTxGainAuto">?</button>
+              </div>
+              <p id="radio-tx-gain-hint" class="radio-subhint"></p>
+            </div>
+
             <div class="control-group">
-              <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
+              <div class="radio-label-row">
+                <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAnalysisRadius,aria-label:radioHelpAnalysisRadius">?</button>
+              </div>
               <div class="radio-input-row">
                 <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
                 <span class="radio-unit">km</span>
@@ -364,7 +396,10 @@
             </div>
 
             <div class="control-group">
-              <span class="label-text" data-i18n="radioSectorAngle">Sector Angle</span>
+              <div class="radio-label-row">
+                <span class="label-text" data-i18n="radioSectorAngle">Sector Angle</span>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSectorAngle,aria-label:radioHelpSectorAngle">?</button>
+              </div>
               <div class="radio-input-row">
                 <input type="number" id="radio-sector-angle" min="1" max="360" value="60" step="1">
                 <span class="radio-unit">&deg;</span>
@@ -374,9 +409,32 @@
             <div class="control-group">
               <span class="label-text" data-i18n="radioFrequency">Frequency</span>
               <select id="radio-frequency" class="radio-select">
-                <option value="144" selected data-i18n="radioFreqVHF">VHF 2m (144 MHz)</option>
-                <option value="430" data-i18n="radioFreqUHF">UHF 70cm (430 MHz)</option>
+                <option value="1.8" data-i18n="radioFreq160m">160m (1.8 MHz)</option>
+                <option value="3.5" data-i18n="radioFreq80m">80m (3.5 MHz)</option>
+                <option value="7" data-i18n="radioFreq40m">40m (7 MHz)</option>
+                <option value="10.1" data-i18n="radioFreq30m">30m (10.1 MHz)</option>
+                <option value="14" data-i18n="radioFreq20m">20m (14 MHz)</option>
+                <option value="18.1" data-i18n="radioFreq17m">17m (18.1 MHz)</option>
+                <option value="21" data-i18n="radioFreq15m">15m (21 MHz)</option>
+                <option value="24.9" data-i18n="radioFreq12m">12m (24.9 MHz)</option>
+                <option value="28" data-i18n="radioFreq10m">10m (28 MHz)</option>
+                <option value="50" data-i18n="radioFreq6m">6m (50 MHz)</option>
+                <option value="144" selected data-i18n="radioFreq2m">2m (144 MHz)</option>
+                <option value="222" data-i18n="radioFreq125m">1.25m (222 MHz)</option>
+                <option value="430" data-i18n="radioFreq70cm">70cm (430 MHz)</option>
+                <option value="902" data-i18n="radioFreq33cm">33cm (902 MHz)</option>
+                <option value="1296" data-i18n="radioFreq23cm">23cm (1296 MHz)</option>
+                <option value="2400" data-i18n="radioFreq13cm">13cm (2400 MHz)</option>
+                <option value="custom" data-i18n="radioFreqCustom">Custom…</option>
               </select>
+            </div>
+
+            <div class="control-group" id="radio-frequency-custom-group" hidden>
+              <span class="label-text" data-i18n="radioCustomFrequency">Custom Frequency</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-frequency-custom" min="0.1" max="20000" value="144" step="0.1">
+                <span class="radio-unit">MHz</span>
+              </div>
             </div>
 
             <div class="control-group control-group-full">
@@ -393,7 +451,10 @@
                 <div class="radio-advanced-body">
                   <div class="radio-advanced-grid">
                     <div class="control-group">
-                      <span class="label-text" data-i18n="radioResolution">Resolution</span>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioResolution">Resolution</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpResolution,aria-label:radioHelpResolution">?</button>
+                      </div>
                       <select id="radio-resolution" class="radio-select">
                         <option value="auto" selected data-i18n="radioResAuto">Auto</option>
                         <option value="12">z12 (~30 m/px)</option>
@@ -405,35 +466,316 @@
                     </div>
 
                     <div class="control-group">
-                      <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpEngine,aria-label:radioHelpEngine">?</button>
+                      </div>
                       <select id="radio-itm-engine" class="radio-select">
                         <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
                         <option value="js" data-i18n="radioEngineJs">JavaScript</option>
                       </select>
                     </div>
 
+                    <div class="control-group">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioPolarization">Polarization</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPolarization,aria-label:radioHelpPolarization">?</button>
+                      </div>
+                      <select id="radio-polarization" class="radio-select">
+                        <option value="1" selected data-i18n="radioPolarizationVertical">Vertical</option>
+                        <option value="45" data-i18n="radioPolarizationSlant45">45° slant</option>
+                        <option value="0" data-i18n="radioPolarizationHorizontal">Horizontal</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioEnvironmentSection">Propagation environment</div>
+
                     <div class="control-group control-group-full">
-                      <label class="radio-checkbox-label">
-                        <input type="checkbox" id="radio-radar-sweep">
-                        <span data-i18n="radioSweepMode">Sweep mode</span>
-                      </label>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioClimate">Climate</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpClimate,aria-label:radioHelpClimate">?</button>
+                      </div>
+                      <select id="radio-climate" class="radio-select">
+                        <option value="1" data-i18n="radioClimateEquatorial">Equatorial</option>
+                        <option value="2" data-i18n="radioClimateContinentalSubtropical">Continental Subtropical</option>
+                        <option value="3" data-i18n="radioClimateMaritimeSubtropical">Maritime Subtropical</option>
+                        <option value="4" data-i18n="radioClimateDesert">Desert</option>
+                        <option value="5" selected data-i18n="radioClimateContinentalTemperate">Continental Temperate</option>
+                        <option value="6" data-i18n="radioClimateMaritimeTemperateLand">Maritime Temperate, Over Land</option>
+                        <option value="7" data-i18n="radioClimateMaritimeTemperateSea">Maritime Temperate, Over Sea</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioSurfaceRefractivity">Surface Refractivity (N0)</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSurfaceRefractivity,aria-label:radioHelpSurfaceRefractivity">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-n0" min="250" max="400" value="301" step="1">
+                        <span class="radio-unit">N</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioGroundType">Ground Type</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundType,aria-label:radioHelpGroundType">?</button>
+                      </div>
+                      <select id="radio-terrain-preset" class="radio-select">
+                        <option value="average" selected data-i18n="radioGroundAverage">Average Ground</option>
+                        <option value="good" data-i18n="radioGroundGood">Good Ground</option>
+                        <option value="poor" data-i18n="radioGroundPoor">Poor Ground</option>
+                        <option value="fresh" data-i18n="radioGroundFreshWater">Fresh Water</option>
+                        <option value="sea" data-i18n="radioGroundSeaWater">Sea Water</option>
+                        <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group" id="radio-terrain-epsilon-group" hidden>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioGroundPermittivity">Ground Permittivity</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundPermittivity,aria-label:radioHelpGroundPermittivity">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-terrain-epsilon" min="1" max="100" value="15" step="0.1">
+                      </div>
+                    </div>
+
+                    <div class="control-group" id="radio-terrain-sigma-group" hidden>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioGroundConductivity">Ground Conductivity</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundConductivity,aria-label:radioHelpGroundConductivity">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-terrain-sigma" min="0.0001" max="10" value="0.008" step="0.001">
+                        <span class="radio-unit">S/m</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioStatisticalModelSection">Statistical model</div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioStatisticalModePreset">Mode Preset</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatMode,aria-label:radioHelpStatMode">?</button>
+                      </div>
+                      <select id="radio-stat-mode" class="radio-select">
+                        <option value="median" selected data-i18n="radioStatModeMedian">Median (50/50/50)</option>
+                        <option value="reliable-time" data-i18n="radioStatModeReliableTime">Reliable Time (90/50/50)</option>
+                        <option value="time-location" data-i18n="radioStatModeTimeLocation">Time + Location (90/90/50)</option>
+                        <option value="conservative" data-i18n="radioStatModeConservative">Conservative (90/90/90)</option>
+                        <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group control-group-full" id="radio-stat-time-group" hidden>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioStatTime">Time</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatTime,aria-label:radioHelpStatTime">?</button>
+                      </div>
+                      <div class="radio-slider-row">
+                        <input type="range" id="radio-stat-time" min="1" max="99" value="50" step="1">
+                        <span id="radio-stat-time-value" class="radio-inline-readout">50%</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full" id="radio-stat-location-group" hidden>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioStatLocation">Location</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatLocation,aria-label:radioHelpStatLocation">?</button>
+                      </div>
+                      <div class="radio-slider-row">
+                        <input type="range" id="radio-stat-location" min="1" max="99" value="50" step="1">
+                        <span id="radio-stat-location-value" class="radio-inline-readout">50%</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full" id="radio-stat-situation-group" hidden>
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioStatSituation">Situation</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatSituation,aria-label:radioHelpStatSituation">?</button>
+                      </div>
+                      <div class="radio-slider-row">
+                        <input type="range" id="radio-stat-situation" min="1" max="99" value="50" step="1">
+                        <span id="radio-stat-situation-value" class="radio-inline-readout">50%</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioMdvarSection">Variability mode</div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioMdvarBase">Base Mode</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarBase,aria-label:radioHelpMdvarBase">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <select id="radio-mdvar-base" class="radio-select">
+                          <option value="0" data-i18n="radioMdvarSingleMessage">Single message</option>
+                          <option value="1" data-i18n="radioMdvarAccidental">Accidental</option>
+                          <option value="2" data-i18n="radioMdvarMobile">Mobile</option>
+                          <option value="3" data-i18n="radioMdvarBroadcast">Broadcast</option>
+                        </select>
+                        <span id="radio-mdvar-value" class="radio-inline-readout">mdvar 12</span>
+                      </div>
                     </div>
 
                     <div class="control-group control-group-full">
-                      <label class="radio-checkbox-label">
-                        <input type="checkbox" id="radio-adaptive-culling" checked>
-                        <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
-                      </label>
+                      <div class="radio-checkbox-row">
+                        <label class="radio-checkbox-label">
+                          <input type="checkbox" id="radio-mdvar-location">
+                          <span data-i18n="radioMdvarLocationModifier">Disable location variability (+10)</span>
+                        </label>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarLocationModifier,aria-label:radioHelpMdvarLocationModifier">?</button>
+                      </div>
                     </div>
 
                     <div class="control-group control-group-full">
-                      <label class="radio-checkbox-label" id="radio-fast-fill-label">
-                        <input type="checkbox" id="radio-fast-fill" checked>
-                        <span data-i18n="radioFastFill">Fast-fill strong blocks</span>
-                      </label>
+                      <div class="radio-checkbox-row">
+                        <label class="radio-checkbox-label">
+                          <input type="checkbox" id="radio-mdvar-situation">
+                          <span data-i18n="radioMdvarSituationModifier">Disable direct situation variability (+20)</span>
+                        </label>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarSituationModifier,aria-label:radioHelpMdvarSituationModifier">?</button>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioReceiverSection">Receiver</div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioRxAntennaHeight">RX Antenna Height</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxHeight,aria-label:radioHelpRxHeight">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-height" min="0" max="100" value="2" step="0.5">
+                        <span class="radio-unit">m</span>
+                        <select id="radio-rx-height-preset" class="radio-select">
+                          <option value="1.5" data-i18n="radioRxHeightPresetHandheld">Handheld 1.5m</option>
+                          <option value="2" selected data-i18n="radioRxHeightPresetVehicle">Vehicle 2m</option>
+                          <option value="10" data-i18n="radioRxHeightPresetRooftop">Rooftop 10m</option>
+                          <option value="30" data-i18n="radioRxHeightPresetTower">Tower 30m</option>
+                          <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioRxAntennaGain">RX Antenna Gain</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxGain,aria-label:radioHelpRxGain">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-gain" min="-10" max="30" value="0" step="0.5">
+                        <span class="radio-unit">dBi</span>
+                        <select id="radio-rx-gain-preset" class="radio-select">
+                          <option value="0" selected data-i18n="radioRxGainPresetHandheld">Handheld 0 dBi</option>
+                          <option value="3" data-i18n="radioRxGainPresetVehicle">Vehicle whip 3 dBi</option>
+                          <option value="6" data-i18n="radioRxGainPresetBase">Base collinear 6 dBi</option>
+                          <option value="12" data-i18n="radioRxGainPresetDirectional">Directional 12 dBi</option>
+                          <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioRxSensitivity">RX Sensitivity</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxSensitivity,aria-label:radioHelpRxSensitivity">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-sensitivity" min="-150" max="-50" value="-110" step="1">
+                        <span class="radio-unit">dBm</span>
+                        <select id="radio-rx-sensitivity-preset" class="radio-select">
+                          <option value="-110" selected data-i18n="radioRxSensitivityPresetHandheld">Handheld FM -110 dBm</option>
+                          <option value="-116" data-i18n="radioRxSensitivityPresetMobile">Mobile FM -116 dBm</option>
+                          <option value="-130" data-i18n="radioRxSensitivityPresetBase">Base SSB -130 dBm</option>
+                          <option value="-140" data-i18n="radioRxSensitivityPresetWeak">Weak signal / digital -140 dBm</option>
+                          <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioPatternSection">Antenna pattern</div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioPatternPreset">Pattern Preset</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreset,aria-label:radioHelpPatternPreset">?</button>
+                      </div>
+                      <select id="radio-pattern-preset" class="radio-select">
+                        <option value="omni" selected data-i18n="radioPatternOmni">Omnidirectional</option>
+                        <option value="monopole" data-i18n="radioPatternMonopole">Monopole</option>
+                        <option value="dipole" data-i18n="radioPatternDipole">Dipole (figure-8)</option>
+                        <option value="yagi3" data-i18n="radioPatternYagi3">3-element Yagi</option>
+                        <option value="yagi5" data-i18n="radioPatternYagi5">5-element Yagi</option>
+                        <option value="cardioid" data-i18n="radioPatternCardioid">Cardioid</option>
+                        <option value="custom" data-i18n="radioPatternCustom">Custom (upload .az file)</option>
+                      </select>
+                    </div>
+
+                    <div class="control-group">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioPatternDirection">Pattern Direction</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternDirection,aria-label:radioHelpPatternDirection">?</button>
+                      </div>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-pattern-bearing" min="0" max="359" value="0" step="1">
+                        <span class="radio-unit">&deg;</span>
+                      </div>
+                      <p class="radio-subhint" data-i18n="radioPatternMapHint">You can also drag the bearing handle on the map.</p>
+                    </div>
+
+                    <div class="control-group control-group-full" id="radio-pattern-upload-group" hidden>
+                      <div class="radio-input-row">
+                        <button id="radio-pattern-upload-btn" type="button" class="xp-secondary-btn radio-secondary-btn" data-i18n="radioPatternUpload">Upload .az file</button>
+                        <input type="file" id="radio-pattern-file" accept=".az,text/plain" hidden>
+                      </div>
+                      <p id="radio-pattern-file-status" class="radio-subhint" hidden></p>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-checkbox-row">
+                        <label class="radio-checkbox-label">
+                          <input type="checkbox" id="radio-radar-sweep">
+                          <span data-i18n="radioSweepMode">Sweep mode</span>
+                        </label>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSweepMode,aria-label:radioHelpSweepMode">?</button>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-checkbox-row">
+                        <label class="radio-checkbox-label">
+                          <input type="checkbox" id="radio-adaptive-culling" checked>
+                          <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
+                        </label>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAdaptiveCulling,aria-label:radioHelpAdaptiveCulling">?</button>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-checkbox-row">
+                        <label class="radio-checkbox-label" id="radio-fast-fill-label">
+                          <input type="checkbox" id="radio-fast-fill" checked>
+                          <span data-i18n="radioFastFill">Fast-fill strong blocks</span>
+                        </label>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpFastFill,aria-label:radioHelpFastFill">?</button>
+                      </div>
                     </div>
 
                     <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioDebugOverlays">Debug overlays</div>
+
+                    <div class="control-group control-group-full">
+                      <div class="radio-label-row">
+                        <span class="label-text" data-i18n="radioPatternPreview">Pattern preview</span>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreview,aria-label:radioHelpPatternPreview">?</button>
+                      </div>
+                      <div class="radio-pattern-preview">
+                        <canvas id="radio-pattern-debug-preview" class="radio-pattern-preview-canvas" width="160" height="160"></canvas>
+                        <p id="radio-pattern-debug-caption" class="radio-subhint radio-pattern-preview-caption"></p>
+                      </div>
+                    </div>
 
                     <div class="control-group control-group-full">
                       <label class="radio-checkbox-label">
