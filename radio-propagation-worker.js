@@ -477,6 +477,36 @@ function processSlice(cells, totalCells) {
   var sliceRxHeightM = rxHeightM;
   var sliceRxSensitivityDbW = rxSensitivityDbW;
 
+  // ITM parameters are constant for the whole slice — build the object(s) once.
+  var sliceItmParams = {
+    climate: itmClimate,
+    n0: itmN0,
+    pol: itmPol,
+    epsilon: itmEpsilon,
+    sigma: itmSigma,
+    mdvar: itmMdvar,
+    time: itmTime,
+    location: itmLocation,
+    situation: itmSituation
+  };
+  // For 45° slant we evaluate H and V then average; pre-build both variants.
+  var slantHorizontalParams = null;
+  var slantVerticalParams = null;
+  if (itmPol === 45) {
+    slantHorizontalParams = {
+      climate: itmClimate, n0: itmN0, pol: 0,
+      epsilon: itmEpsilon, sigma: itmSigma,
+      mdvar: itmMdvar, time: itmTime,
+      location: itmLocation, situation: itmSituation
+    };
+    slantVerticalParams = {
+      climate: itmClimate, n0: itmN0, pol: 1,
+      epsilon: itmEpsilon, sigma: itmSigma,
+      mdvar: itmMdvar, time: itmTime,
+      location: itmLocation, situation: itmSituation
+    };
+  }
+
   var evaluated = 0;
   // Binary batch buffer: Float32Array triples [fullBitmapX, fullBitmapY, band, ...]
   var batchBuf = new Float32Array(COVERAGE_BATCH_SIZE * 3);
@@ -520,17 +550,6 @@ function processSlice(cells, totalCells) {
   function evaluateCell(cell) {
     var distM = haversineDistance(txLat, txLng, cell.lat, cell.lng);
     var effectiveTxGainDbi = txGainDbi;
-    var itmParams = {
-      climate: itmClimate,
-      n0: itmN0,
-      pol: itmPol,
-      epsilon: itmEpsilon,
-      sigma: itmSigma,
-      mdvar: itmMdvar,
-      time: itmTime,
-      location: itmLocation,
-      situation: itmSituation
-    };
 
     if (txPatternHasOffsets) {
       var azimuthDeg = bearingFromTx(cell.lat, cell.lng);
@@ -554,7 +573,7 @@ function processSlice(cells, totalCells) {
     var pathLoss;
     try {
       pathLoss = computePolarizedPathLoss(
-        result.profile, result.spacingM, antennaHeight, sliceRxHeightM, freqMHz, itmParams
+        result.profile, result.spacingM, antennaHeight, sliceRxHeightM, freqMHz
       );
     } catch (e) {
       return -Infinity;
@@ -563,38 +582,18 @@ function processSlice(cells, totalCells) {
     return txPowerDbW + effectiveTxGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
   }
 
-  function computePolarizedPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz, itmParams) {
+  function computePolarizedPathLoss(profile, spacingM, txHeightM, rxHeightM, freqMHz) {
     var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
 
-    if (itmParams.pol !== 45) {
-      return computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, itmParams);
+    if (sliceItmParams.pol !== 45) {
+      return computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, sliceItmParams);
     }
-
-    var horizontalParams = cloneItmParams(itmParams);
-    horizontalParams.pol = 0;
-    var verticalParams = cloneItmParams(itmParams);
-    verticalParams.pol = 1;
-
-    var horizontalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, horizontalParams);
-    var verticalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, verticalParams);
 
     // NTIA ITM only supports pure horizontal or vertical polarization.
     // Use the midpoint between those two model outputs as a practical slant approximation.
+    var horizontalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, slantHorizontalParams);
+    var verticalLossDb = computeFn(profile, spacingM, txHeightM, rxHeightM, freqMHz, slantVerticalParams);
     return (horizontalLossDb + verticalLossDb) * 0.5;
-  }
-
-  function cloneItmParams(params) {
-    return {
-      climate: params.climate,
-      n0: params.n0,
-      pol: params.pol,
-      epsilon: params.epsilon,
-      sigma: params.sigma,
-      mdvar: params.mdvar,
-      time: params.time,
-      location: params.location,
-      situation: params.situation
-    };
   }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.

@@ -2521,15 +2521,13 @@
       el.addEventListener('input', refreshAnalysisUiState);
       el.addEventListener('change', refreshAnalysisUiState);
     });
+    // Note: rxGain/rxHeight/rxSensitivity preset selects already wire up
+    // refreshAnalysisUiState via bindPresetSelect, and patternPresetSelect
+    // does so via initPatternControls. They are intentionally omitted here
+    // to avoid duplicate listeners.
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
      itmEngineSelect, polarizationSelect, climateSelect, terrainPresetSelect,
-     statModeSelect, mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck,
-     rxGainPresetSelect, rxHeightPresetSelect, rxSensitivityPresetSelect,
-     patternPresetSelect].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener('change', refreshAnalysisUiState);
-    });
-    [rxGainPresetSelect, rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
+     statModeSelect, mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
     });

@@ -91,11 +91,7 @@
       for (var k = 0; k < parts.length; k++) {
         var pair = parts[k].split(':');
         if (pair.length === 2) {
-          var attrName = pair[0].trim();
-          if (attrName === 'title' && attrEl.classList && attrEl.classList.contains('radio-help-tip')) {
-            continue;
-          }
-          attrEl.setAttribute(attrName, t(pair[1].trim()));
+          attrEl.setAttribute(pair[0].trim(), t(pair[1].trim()));
         }
       }
     }
@@ -105,11 +101,6 @@
       var phEl = phEls[p];
       var placeholderKey = phEl.getAttribute('data-i18n-placeholder');
       if (placeholderKey) phEl.placeholder = t(placeholderKey);
-    }
-
-    var helpTipEls = document.querySelectorAll('.radio-help-tip[title]');
-    for (var h = 0; h < helpTipEls.length; h++) {
-      helpTipEls[h].removeAttribute('title');
     }
 
     document.documentElement.lang = getLang();

@@ -2291,11 +2291,6 @@ a.action-btn {
   }
 }
 
-  .radio-pattern-map-control {
-    top: 12px;
-    min-width: 160px;
-    padding: 8px 9px;
-  }
 /* ===== Tutorial Overlay ===== */
 .tutorial-highlight {
   position: fixed;
@@ -2554,6 +2549,12 @@ a.action-btn {
   }
   .leaflet-draw-toolbar .leaflet-draw-edit-remove {
     background-position: calc(50% - 4px) center !important;
+  }
+
+  .radio-pattern-map-control {
+    top: 12px;
+    min-width: 160px;
+    padding: 8px 9px;
   }
 }
 
