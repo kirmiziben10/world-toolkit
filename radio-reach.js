@@ -61,7 +61,9 @@
   var coordsEl, instructionEl, warningEl, analyzeBtnEl, clearBtnEl,
       progressOverlayEl, progressBarEl, progressTextEl,
       statsPanelEl, statsEl,
-      antennaInput, radiusInput, frequencySelect, txPowerInput,
+      antennaInput, radiusInput, frequencySelect, txPowerInput, txGainInput,
+      rxGainInput, rxHeightInput, rxHeightPresetSelect,
+      rxSensitivityInput, rxSensitivityPresetSelect,
       resolutionSelect, sectorAngleInput,
       controlsPanel, controlsToggle, legendEl, unfilteredCheck,
       radarSweepCheck, adaptiveCullingCheck, fastFillCheck,
@@ -92,6 +94,12 @@
     frequencySelect = document.getElementById('radio-frequency');
     resolutionSelect = document.getElementById('radio-resolution');
     txPowerInput = document.getElementById('radio-tx-power');
+    txGainInput = document.getElementById('radio-tx-gain');
+    rxGainInput = document.getElementById('radio-rx-gain');
+    rxHeightInput = document.getElementById('radio-rx-height');
+    rxHeightPresetSelect = document.getElementById('radio-rx-height-preset');
+    rxSensitivityInput = document.getElementById('radio-rx-sensitivity');
+    rxSensitivityPresetSelect = document.getElementById('radio-rx-sensitivity-preset');
     legendEl = document.getElementById('radio-legend');
     controlsPanel = document.getElementById('radio-controls-panel');
     controlsToggle = document.getElementById('radio-controls-toggle');
@@ -124,6 +132,7 @@
     bindDebugInputs();
     syncFastFillControl();
     initAdvancedSettings();
+    initReceiverPresets();
     updateTerrainCreditHtml();
     updateAnalysisWarning();
 
@@ -251,6 +260,47 @@
     });
   }
 
+  function initReceiverPresets() {
+    bindPresetSelect(rxHeightInput, rxHeightPresetSelect, [1.5, 2, 10, 30]);
+    bindPresetSelect(rxSensitivityInput, rxSensitivityPresetSelect, [-110, -116, -130, -140]);
+  }
+
+  function bindPresetSelect(inputEl, selectEl, presetValues) {
+    if (!inputEl || !selectEl) return;
+
+    function syncFromInput() {
+      var value = parseFloat(inputEl.value);
+      var matched = false;
+      for (var i = 0; i < presetValues.length; i++) {
+        if (!isNaN(value) && Math.abs(value - presetValues[i]) < 0.0001) {
+          selectEl.value = String(presetValues[i]);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        selectEl.value = 'custom';
+      }
+    }
+
+    selectEl.addEventListener('change', function () {
+      if (selectEl.value !== 'custom') {
+        inputEl.value = selectEl.value;
+      }
+      refreshAnalysisUiState();
+    });
+
+    inputEl.addEventListener('input', syncFromInput);
+    inputEl.addEventListener('change', syncFromInput);
+
+    syncFromInput();
+  }
+
+  function refreshAnalysisUiState() {
+    updateAnalysisWarning();
+    updateDirectionPreview();
+  }
+
   // ===== Map Click Handler =====
   function handleMapClick(latlng) {
     if (radioState.running) return;
@@ -344,9 +394,12 @@
     var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
     var radiusM = radiusKm * 1000;
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var txGainDbi = clampNumber(txGainInput.value, -10, 30, 0);
+    var rxGainDbi = clampNumber(rxGainInput.value, -10, 30, 0);
+    var rxSensitivityDbW = clampNumber(rxSensitivityInput.value, -150, -50, -110) - 30;
     var freqMHz = parseFloat(frequencySelect.value);
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
-    var powerLimitM = freeSpaceMaxDistanceM(txPowerW, freqMHz);
+    var powerLimitM = freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW);
 
     L.circle(txLatLng, {
       pane: RADIO_PREVIEW_PANE,
@@ -467,6 +520,11 @@
     var antennaHeight = clampNumber(antennaInput.value, 0, 500, 10);
     var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var txGainDbi = clampNumber(txGainInput.value, -10, 30, 0);
+    var rxGainDbi = clampNumber(rxGainInput.value, -10, 30, 0);
+    var rxHeightM = clampNumber(rxHeightInput.value, 0, 100, 2);
+    var rxSensitivityDbm = clampNumber(rxSensitivityInput.value, -150, -50, -110);
+    var rxSensitivityDbW = rxSensitivityDbm - 30;
     var freqMHz = parseFloat(frequencySelect.value);
     var unfiltered = !!(unfilteredCheck && unfilteredCheck.checked);
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
@@ -484,6 +542,10 @@
     antennaInput.value = antennaHeight;
     radiusInput.value = radiusKm;
     txPowerInput.value = txPowerW;
+    txGainInput.value = txGainDbi;
+    rxGainInput.value = rxGainDbi;
+    rxHeightInput.value = rxHeightM;
+    rxSensitivityInput.value = rxSensitivityDbm;
 
     var memoryEstimate = estimateAnalysisMemoryMB(
       radioState.lat,
@@ -491,6 +553,9 @@
       radiusKm,
       txPowerW,
       freqMHz,
+      txGainDbi,
+      rxGainDbi,
+      rxSensitivityDbW,
       radarSweep
     );
     renderAnalysisWarning(memoryEstimate, radarSweep, resVal);
@@ -553,6 +618,10 @@
       zoom: analysisZoom,
       freqMHz: freqMHz,
       txPowerW: txPowerW,
+      txGainDbi: txGainDbi,
+      rxGainDbi: rxGainDbi,
+      rxHeightM: rxHeightM,
+      rxSensitivityDbW: rxSensitivityDbW,
       unfiltered: unfiltered,
       itmEngine: itmEngine,
       radarSweep: radarSweep,
@@ -873,6 +942,10 @@
           antennaHeight: txParams.antennaHeight,
           freqMHz: txParams.freqMHz,
           txPowerW: txParams.txPowerW,
+          txGainDbi: txParams.txGainDbi,
+          rxGainDbi: txParams.rxGainDbi,
+          rxHeightM: txParams.rxHeightM,
+          rxSensitivityDbW: txParams.rxSensitivityDbW,
           zoom: txParams.zoom,
           mpp: txParams.mpp,
           unfiltered: radioState._unfiltered,
@@ -934,6 +1007,10 @@
         antennaHeight: txParams.antennaHeight,
         freqMHz: txParams.freqMHz,
         txPowerW: txParams.txPowerW,
+        txGainDbi: txParams.txGainDbi,
+        rxGainDbi: txParams.rxGainDbi,
+        rxHeightM: txParams.rxHeightM,
+        rxSensitivityDbW: txParams.rxSensitivityDbW,
         zoom: txParams.zoom,
         mpp: txParams.mpp,
         unfiltered: radioState._unfiltered,
@@ -1430,9 +1507,9 @@
     return { ok: true, count: radioState.analysisTileCount };
   }
 
-  function estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep) {
+  function estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW, radarSweep) {
     var radiusM = radiusKm * 1000;
-    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz));
+    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW));
     var mpp = metersPerPixel(lat, zoom);
     var radiusPx = Math.ceil(effectiveRadiusM / mpp);
     var bufferPx = Math.ceil((COVERAGE_BUFFER_KM * 1000) / mpp);
@@ -1441,10 +1518,10 @@
     return totalBytes / (1024 * 1024);
   }
 
-  function estimateAnalysisMemoryMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep) {
-    var bitmapMB = estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, radarSweep);
+  function estimateAnalysisMemoryMB(lat, zoom, radiusKm, txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW, radarSweep) {
+    var bitmapMB = estimateCoverageBitmapMB(lat, zoom, radiusKm, txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW, radarSweep);
     var radiusM = radiusKm * 1000;
-    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz));
+    var effectiveRadiusM = radarSweep ? radiusM : Math.min(radiusM, freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW));
     var mpp = metersPerPixel(lat, zoom);
     var tileSpanM = mpp * 256;
     var approxRadiusTiles = Math.ceil(effectiveRadiusM / Math.max(tileSpanM, 1));
@@ -1493,18 +1570,16 @@
   }
 
   function bindWarningInputs() {
-    var update = function () {
-      updateAnalysisWarning();
-      updateDirectionPreview();
-    };
-    [antennaInput, radiusInput, txPowerInput, sectorAngleInput].forEach(function (el) {
+    [antennaInput, radiusInput, txPowerInput, txGainInput, rxGainInput,
+     rxHeightInput, rxSensitivityInput, sectorAngleInput].forEach(function (el) {
       if (!el) return;
-      el.addEventListener('input', update);
-      el.addEventListener('change', update);
+      el.addEventListener('input', refreshAnalysisUiState);
+      el.addEventListener('change', refreshAnalysisUiState);
     });
-    [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck, itmEngineSelect].forEach(function (el) {
+    [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
+     itmEngineSelect, rxHeightPresetSelect, rxSensitivityPresetSelect].forEach(function (el) {
       if (!el) return;
-      el.addEventListener('change', update);
+      el.addEventListener('change', refreshAnalysisUiState);
     });
     if (adaptiveCullingCheck) {
       adaptiveCullingCheck.addEventListener('change', syncFastFillControl);
@@ -1682,6 +1757,9 @@
 
     var radiusKm = clampNumber(radiusInput.value, 5, MAX_RADIUS_KM, 30);
     var txPowerW = clampNumber(txPowerInput.value, 0.1, 100, 5);
+    var txGainDbi = clampNumber(txGainInput.value, -10, 30, 0);
+    var rxGainDbi = clampNumber(rxGainInput.value, -10, 30, 0);
+    var rxSensitivityDbW = clampNumber(rxSensitivityInput.value, -150, -50, -110) - 30;
     var freqMHz = parseFloat(frequencySelect.value);
     var radarSweep = !!(radarSweepCheck && radarSweepCheck.checked);
     var resVal = resolutionSelect ? resolutionSelect.value : 'auto';
@@ -1694,6 +1772,9 @@
       radiusKm,
       txPowerW,
       freqMHz,
+      txGainDbi,
+      rxGainDbi,
+      rxSensitivityDbW,
       radarSweep
     );
 
@@ -1749,8 +1830,8 @@
     return lines.join(' ');
   }
 
-  function freeSpaceMaxDistanceM(txPowerW, freqMHz) {
-    var marginDb = 10 * Math.log10(txPowerW) + 140;
+  function freeSpaceMaxDistanceM(txPowerW, freqMHz, txGainDbi, rxGainDbi, rxSensitivityDbW) {
+    var marginDb = 10 * Math.log10(txPowerW) + txGainDbi + rxGainDbi - rxSensitivityDbW;
     var dKm = Math.pow(10, (marginDb - 32.45 - 20 * Math.log10(freqMHz)) / 20);
     return dKm * 1000;
   }

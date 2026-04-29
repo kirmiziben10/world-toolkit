@@ -13,8 +13,8 @@ var EARTH_RADIUS = 6378137;
 var MAX_TILES = 2000;
 var CHUNK_SIZE = 64;
 var COVERAGE_BATCH_SIZE = 500;
-var RX_HEIGHT_M = 2;
-var RX_SENSITIVITY_DBW = -140;
+var DEFAULT_RX_HEIGHT_M = 2;
+var DEFAULT_RX_SENSITIVITY_DBW = -140;
 var itmClimate = 5;
 var itmN0 = 301;
 var itmPol = 1;
@@ -24,6 +24,10 @@ var itmMdvar = 12;
 var itmTime = 50;
 var itmLocation = 50;
 var itmSituation = 50;
+var txAntennaGainDbi = 0;
+var rxAntennaGainDbi = 0;
+var rxHeightM = DEFAULT_RX_HEIGHT_M;
+var rxSensitivityDbW = DEFAULT_RX_SENSITIVITY_DBW;
 var CULL_BLOCK_SHIFT = 2;  // 4x4 blocks: cellX >> 2, cellY >> 2
 var ADAPTIVE_FILL_MARGIN_DB = 28;
 var ADAPTIVE_FILL_ELEV_SPAN_M = 16;
@@ -379,6 +383,10 @@ function handleStartInner(msg) {
   antennaHeight = msg.antennaHeight;
   freqMHz = msg.freqMHz;
   txPowerW = msg.txPowerW;
+  txAntennaGainDbi = msg.txGainDbi === undefined ? 0 : msg.txGainDbi;
+  rxAntennaGainDbi = msg.rxGainDbi === undefined ? 0 : msg.rxGainDbi;
+  rxHeightM = msg.rxHeightM === undefined ? DEFAULT_RX_HEIGHT_M : msg.rxHeightM;
+  rxSensitivityDbW = msg.rxSensitivityDbW === undefined ? DEFAULT_RX_SENSITIVITY_DBW : msg.rxSensitivityDbW;
   zoom = msg.zoom;
   mpp = msg.mpp;
   sliceId = msg.sliceId;
@@ -424,8 +432,10 @@ function handleStartInner(msg) {
 
 function processSlice(cells, totalCells) {
   var txPowerDbW = 10 * Math.log10(txPowerW);
-  var txGainDbi = 0;
-  var rxGainDbi = 0;
+  var txGainDbi = txAntennaGainDbi;
+  var rxGainDbi = rxAntennaGainDbi;
+  var sliceRxHeightM = rxHeightM;
+  var sliceRxSensitivityDbW = rxSensitivityDbW;
 
   var evaluated = 0;
   // Binary batch buffer: Float32Array triples [fullBitmapX, fullBitmapY, band, ...]
@@ -482,7 +492,7 @@ function processSlice(cells, totalCells) {
     };
 
     if (distM < mpp) {
-      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - RX_SENSITIVITY_DBW;
+      return txPowerDbW + txGainDbi + rxGainDbi - freeSpacePathLossDb(distM, freqMHz) - sliceRxSensitivityDbW;
     }
 
     var result = buildProfile(txLat, txLng, cell.lat, cell.lng);
@@ -492,13 +502,13 @@ function processSlice(cells, totalCells) {
     try {
       var computeFn = activeEngine === 'js' ? jsComputeFn : self.computeITMPathLoss;
       pathLoss = computeFn(
-        result.profile, result.spacingM, antennaHeight, RX_HEIGHT_M, freqMHz, itmParams
+        result.profile, result.spacingM, antennaHeight, sliceRxHeightM, freqMHz, itmParams
       );
     } catch (e) {
       return -Infinity;
     }
 
-    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - RX_SENSITIVITY_DBW;
+    return txPowerDbW + txGainDbi + rxGainDbi - pathLoss - sliceRxSensitivityDbW;
   }
 
   // Sort cells into 64×64 spatial chunks for tile batching efficiency.

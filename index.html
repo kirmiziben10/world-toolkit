@@ -356,6 +356,14 @@
             </div>
 
             <div class="control-group">
+              <span class="label-text" data-i18n="radioTxAntennaGain">TX Antenna Gain</span>
+              <div class="radio-input-row">
+                <input type="number" id="radio-tx-gain" min="-10" max="30" value="0" step="0.5">
+                <span class="radio-unit">dBi</span>
+              </div>
+            </div>
+
+            <div class="control-group">
               <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
               <div class="radio-input-row">
                 <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
@@ -410,6 +418,46 @@
                         <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
                         <option value="js" data-i18n="radioEngineJs">JavaScript</option>
                       </select>
+                    </div>
+
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioReceiverSection">Receiver</div>
+
+                    <div class="control-group control-group-full">
+                      <span class="label-text" data-i18n="radioRxAntennaHeight">RX Antenna Height</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-height" min="0" max="100" value="2" step="0.5">
+                        <span class="radio-unit">m</span>
+                        <select id="radio-rx-height-preset" class="radio-select">
+                          <option value="1.5" data-i18n="radioRxHeightPresetHandheld">Handheld 1.5m</option>
+                          <option value="2" selected data-i18n="radioRxHeightPresetVehicle">Vehicle 2m</option>
+                          <option value="10" data-i18n="radioRxHeightPresetRooftop">Rooftop 10m</option>
+                          <option value="30" data-i18n="radioRxHeightPresetTower">Tower 30m</option>
+                          <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="control-group">
+                      <span class="label-text" data-i18n="radioRxAntennaGain">RX Antenna Gain</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-gain" min="-10" max="30" value="0" step="0.5">
+                        <span class="radio-unit">dBi</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <span class="label-text" data-i18n="radioRxSensitivity">RX Sensitivity</span>
+                      <div class="radio-input-row">
+                        <input type="number" id="radio-rx-sensitivity" min="-150" max="-50" value="-110" step="1">
+                        <span class="radio-unit">dBm</span>
+                        <select id="radio-rx-sensitivity-preset" class="radio-select">
+                          <option value="-110" selected data-i18n="radioRxSensitivityPresetHandheld">Handheld FM -110 dBm</option>
+                          <option value="-116" data-i18n="radioRxSensitivityPresetMobile">Mobile FM -116 dBm</option>
+                          <option value="-130" data-i18n="radioRxSensitivityPresetBase">Base SSB -130 dBm</option>
+                          <option value="-140" data-i18n="radioRxSensitivityPresetWeak">Weak signal / digital -140 dBm</option>
+                          <option value="custom" data-i18n="radioPresetCustom">Custom</option>
+                        </select>
+                      </div>
                     </div>
 
                     <div class="control-group control-group-full">
