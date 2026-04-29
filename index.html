@@ -539,6 +539,35 @@
                       </div>
                     </div>
 
+                    <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioMdvarSection">Variability mode</div>
+
+                    <div class="control-group control-group-full">
+                      <span class="label-text" data-i18n="radioMdvarBase">Base Mode</span>
+                      <div class="radio-input-row">
+                        <select id="radio-mdvar-base" class="radio-select">
+                          <option value="0" data-i18n="radioMdvarSingleMessage">Single message</option>
+                          <option value="1" data-i18n="radioMdvarAccidental">Accidental</option>
+                          <option value="2" data-i18n="radioMdvarMobile">Mobile</option>
+                          <option value="3" data-i18n="radioMdvarBroadcast">Broadcast</option>
+                        </select>
+                        <span id="radio-mdvar-value" class="radio-inline-readout">mdvar 12</span>
+                      </div>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-mdvar-location">
+                        <span data-i18n="radioMdvarLocationModifier">Disable location variability (+10)</span>
+                      </label>
+                    </div>
+
+                    <div class="control-group control-group-full">
+                      <label class="radio-checkbox-label">
+                        <input type="checkbox" id="radio-mdvar-situation">
+                        <span data-i18n="radioMdvarSituationModifier">Disable direct situation variability (+20)</span>
+                      </label>
+                    </div>
+
                     <div class="control-group control-group-full radio-advanced-subheading" data-i18n="radioReceiverSection">Receiver</div>
 
                     <div class="control-group control-group-full">

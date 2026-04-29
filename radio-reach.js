@@ -98,6 +98,7 @@
       statModeSelect, statTimeGroup, statTimeInput, statTimeValueEl,
       statLocationGroup, statLocationInput, statLocationValueEl,
       statSituationGroup, statSituationInput, statSituationValueEl,
+      mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck, mdvarValueEl,
       patternPresetSelect, patternBearingInput, patternUploadGroup,
       patternUploadBtn, patternFileInput, patternFileStatusEl,
       resolutionSelect, sectorAngleInput,
@@ -157,6 +158,10 @@
     statSituationGroup = document.getElementById('radio-stat-situation-group');
     statSituationInput = document.getElementById('radio-stat-situation');
     statSituationValueEl = document.getElementById('radio-stat-situation-value');
+    mdvarBaseSelect = document.getElementById('radio-mdvar-base');
+    mdvarLocationCheck = document.getElementById('radio-mdvar-location');
+    mdvarSituationCheck = document.getElementById('radio-mdvar-situation');
+    mdvarValueEl = document.getElementById('radio-mdvar-value');
     patternPresetSelect = document.getElementById('radio-pattern-preset');
     patternBearingInput = document.getElementById('radio-pattern-bearing');
     patternUploadGroup = document.getElementById('radio-pattern-upload-group');
@@ -194,6 +199,7 @@
       updateTerrainCreditHtml();
       updatePatternUi();
       updateEirpDisplay();
+      updateMdvarUi();
     });
 
     bindWarningInputs();
@@ -203,6 +209,7 @@
     initReceiverPresets();
     initEnvironmentControls();
     initStatisticalControls();
+    initMdvarControls();
     initFrequencyControls();
     initPatternControls();
     updateEirpDisplay();
@@ -360,6 +367,19 @@
     updateStatisticalUi();
   }
 
+  function initMdvarControls() {
+    var defaultMdvar = decodeMdvar(DEFAULT_ITM_PARAMS.mdvar);
+    if (mdvarBaseSelect) mdvarBaseSelect.value = String(defaultMdvar.base);
+    if (mdvarLocationCheck) mdvarLocationCheck.checked = defaultMdvar.location;
+    if (mdvarSituationCheck) mdvarSituationCheck.checked = defaultMdvar.situation;
+
+    [mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener('change', updateMdvarUi);
+    });
+    updateMdvarUi();
+  }
+
   function initPatternControls() {
     if (patternPresetSelect) {
       patternPresetSelect.addEventListener('change', function () {
@@ -420,6 +440,11 @@
     if (statSituationValueEl && statSituationInput) statSituationValueEl.textContent = statSituationInput.value + '%';
   }
 
+  function updateMdvarUi() {
+    if (!mdvarValueEl) return;
+    mdvarValueEl.textContent = t('radioMdvarValue', { value: getSelectedMdvar() });
+  }
+
   function updateFrequencyUi() {
     if (!frequencySelect || !frequencyCustomGroup) return;
     frequencyCustomGroup.hidden = frequencySelect.value !== 'custom';
@@ -473,6 +498,42 @@
     return { time: time, location: location, situation: situation };
   }
 
+  function decodeMdvar(mdvar) {
+    var value = parseInt(mdvar, 10);
+    if (isNaN(value)) value = DEFAULT_ITM_PARAMS.mdvar;
+
+    var situation = value >= 20;
+    if (situation) value -= 20;
+
+    var location = value >= 10;
+    if (location) value -= 10;
+
+    if (value < 0 || value > 3) {
+      value = DEFAULT_ITM_PARAMS.mdvar;
+      situation = value >= 20;
+      if (situation) value -= 20;
+      location = value >= 10;
+      if (location) value -= 10;
+    }
+
+    return {
+      base: value,
+      location: location,
+      situation: situation,
+    };
+  }
+
+  function getSelectedMdvar() {
+    var defaultMdvar = decodeMdvar(DEFAULT_ITM_PARAMS.mdvar);
+    var base = mdvarBaseSelect ? parseInt(mdvarBaseSelect.value, 10) : defaultMdvar.base;
+    if (isNaN(base) || base < 0 || base > 3) base = defaultMdvar.base;
+
+    var mdvar = base;
+    if (mdvarLocationCheck && mdvarLocationCheck.checked) mdvar += 10;
+    if (mdvarSituationCheck && mdvarSituationCheck.checked) mdvar += 20;
+    return mdvar;
+  }
+
   function getItmParams() {
     var terrain = getSelectedTerrainParams();
     var statistical = getStatisticalParams();
@@ -485,7 +546,7 @@
       pol: polarizationSelect && polarizationSelect.value === '0' ? 0 : DEFAULT_ITM_PARAMS.pol,
       epsilon: terrain.epsilon,
       sigma: terrain.sigma,
-      mdvar: DEFAULT_ITM_PARAMS.mdvar,
+      mdvar: getSelectedMdvar(),
       time: statistical.time,
       location: statistical.location,
       situation: statistical.situation,
@@ -1975,7 +2036,7 @@
     });
     [frequencySelect, resolutionSelect, radarSweepCheck, adaptiveCullingCheck,
      itmEngineSelect, polarizationSelect, climateSelect, terrainPresetSelect,
-     statModeSelect,
+    statModeSelect, mdvarBaseSelect, mdvarLocationCheck, mdvarSituationCheck,
      rxHeightPresetSelect, rxSensitivityPresetSelect, patternPresetSelect].forEach(function (el) {
       if (!el) return;
       el.addEventListener('change', refreshAnalysisUiState);
