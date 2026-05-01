@@ -79,7 +79,7 @@ SOFTWARE.
 `terrain-tiles.js` fetches Terrarium-encoded elevation tiles from the public `elevation-tiles-prod` bucket on AWS Open Data:
 
 - Dataset registry: https://registry.opendata.aws/terrain-tiles/
-- Hosted tile endpoint used by this project: `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`
+- Hosted tile endpoint used by this project: `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png`
 - Documentation and attribution guide: https://github.com/tilezen/joerd/blob/master/docs/attribution.md
 - Managed by: Mapzen, a Linux Foundation project
 

@@ -24,7 +24,7 @@ User draws rectangle on Leaflet map
   → app.js validates tile count before allowing analysis (MAX_TILES=80)
   → app.js computes tile coordinates for the selection
   → Fetches Terrarium-encoded PNG terrain tiles from AWS Open Data CDN
-    (https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png)
+    (https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png)
   → Decodes elevation from RGB pixels: (R*256 + G + B/256) - 32768
   → Transfers Float32Array elevation grid to WebWorker (zero-copy via transferable)
   → terrain-worker.js runs analysis pipeline:

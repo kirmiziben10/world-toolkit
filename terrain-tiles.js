@@ -3,7 +3,7 @@
 
   var EARTH_RADIUS = 6378137; // meters
   var TILE_SIZE = 256;
-  var TERRAIN_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
+  var TERRAIN_URL = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium';
   var tileCache = new Map();
 
   function lngToTileX(lng, zoom) {
