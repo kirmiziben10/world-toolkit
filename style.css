@@ -1746,14 +1746,21 @@ a.action-btn {
 }
 
 .radio-help-tip {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
   position: relative;
   flex-shrink: 0;
   width: 18px;
   height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   padding: 0;
   border: 1px solid rgba(149, 120, 48, 0.34);
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(244, 235, 203, 0.95), rgba(223, 205, 145, 0.9));
+  background-color: rgba(244, 235, 203, 0.95);
   color: #5e5133;
   font: inherit;
   font-size: 11px;
