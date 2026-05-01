@@ -123,7 +123,7 @@
       polarizationSelect,
       advancedSettingsEl, debugDownloadedTilesCheck, debugSkippedTilesCheck,
       debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck,
-      helpPopoverEl;
+      helpPopoverEl, helpStickyButton = null;
 
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
@@ -272,17 +272,39 @@
       button.addEventListener('focus', handleHelpTipEnter);
       button.addEventListener('mouseleave', handleHelpTipLeave);
       button.addEventListener('blur', handleHelpTipLeave);
+      button.addEventListener('click', handleHelpTipClick);
     }
 
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     window.addEventListener('scroll', hideHelpPopover, true);
     window.addEventListener('resize', hideHelpPopover);
   }
 
   function handleHelpTipEnter(event) {
+    if (helpStickyButton) return;
     showHelpPopover(event.currentTarget);
   }
 
   function handleHelpTipLeave() {
+    if (helpStickyButton) return;
+    hideHelpPopover();
+  }
+
+  function handleHelpTipClick(event) {
+    event.stopPropagation();
+    var button = event.currentTarget;
+    if (helpStickyButton === button) {
+      hideHelpPopover();
+    } else {
+      helpStickyButton = button;
+      showHelpPopover(button);
+    }
+  }
+
+  function handleDocumentPointerDown(event) {
+    if (!helpStickyButton) return;
+    if (event.target.closest && event.target.closest('.radio-help-tip')) return;
+    if (helpPopoverEl && helpPopoverEl.contains(event.target)) return;
     hideHelpPopover();
   }
 
@@ -297,6 +319,7 @@
 
     helpPopoverEl.textContent = tooltipText;
     helpPopoverEl.classList.add('is-visible');
+    helpPopoverEl.classList.remove('flip-up');
 
     var rect = button.getBoundingClientRect();
     var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -309,7 +332,13 @@
       left = Math.max(12, viewportWidth - popoverRect.width - 12);
     }
     if (top + popoverRect.height > viewportHeight - 12) {
-      top = Math.max(12, viewportHeight - popoverRect.height - 12);
+      var above = rect.top - popoverRect.height - 10;
+      if (above >= 12) {
+        top = above;
+        helpPopoverEl.classList.add('flip-up');
+      } else {
+        top = Math.max(12, viewportHeight - popoverRect.height - 12);
+      }
     }
 
     helpPopoverEl.style.left = left + 'px';
@@ -318,7 +347,9 @@
 
   function hideHelpPopover() {
     if (!helpPopoverEl) return;
+    helpStickyButton = null;
     helpPopoverEl.classList.remove('is-visible');
+    helpPopoverEl.classList.remove('flip-up');
     helpPopoverEl.style.left = '';
     helpPopoverEl.style.top = '';
   }

@@ -1807,9 +1807,20 @@ a.action-btn {
   transform: rotate(45deg);
 }
 
+.radio-help-popover.flip-up::before {
+  top: auto;
+  bottom: -6px;
+  background: linear-gradient(180deg, rgba(244, 234, 201, 0.98), rgba(255, 250, 236, 0.98));
+  border-left: none;
+  border-top: none;
+  border-right: 1px solid rgba(194, 165, 92, 0.95);
+  border-bottom: 1px solid rgba(194, 165, 92, 0.95);
+}
+
 .radio-help-popover.is-visible {
   opacity: 1;
   transform: translateY(0);
+  pointer-events: auto;
 }
 
 .radio-help-tip:focus-visible {

@@ -299,12 +299,12 @@
         <span class="titlebar-text" data-i18n="radioReachTitle">Radio Reach</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-radio" title="Maximize" data-i18n-attr="title:maximize">
+        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-radio" aria-label="Maximize" data-i18n-attr="aria-label:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-radio" title="Close" data-i18n-attr="title:close">
+        <button class="titlebar-btn" id="btn-close-radio" aria-label="Close" data-i18n-attr="aria-label:close">
           <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
         </button>
       </div>
@@ -324,7 +324,7 @@
     <!-- Window Content (flex container: controls sidebar + map) -->
     <div id="radio-window-content">
       <!-- Toggle Chevron -->
-      <div id="radio-controls-toggle" class="controls-toggle" title="Toggle filters" data-i18n-attr="title:toggleFilters">
+      <div id="radio-controls-toggle" class="controls-toggle" role="button" aria-label="Toggle filters" data-i18n-attr="aria-label:toggleFilters">
         <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
         </svg>
@@ -850,7 +850,7 @@
       <div id="radio-stats-panel" class="xp-panel" hidden>
         <div class="xp-panel-header">
           <h2 data-i18n="radioResults">Results</h2>
-          <button id="radio-close-stats" class="xp-icon-btn" title="Close" data-i18n-attr="title:close">✕</button>
+          <button id="radio-close-stats" class="xp-icon-btn" aria-label="Close" data-i18n-attr="aria-label:close">✕</button>
         </div>
         <div id="radio-stats" class="radio-stats-body"></div>
       </div>
