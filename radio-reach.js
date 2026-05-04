@@ -125,6 +125,122 @@
       debugTileBordersCheck, debugWedgeBordersCheck, debugAnalysisBoundsCheck,
       helpPopoverEl, helpStickyButton = null;
 
+  function setAriaExpanded(element, expanded) {
+    if (!element) return;
+    element.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+
+  function setAnalysisBusy(isBusy) {
+    var busy = isBusy ? 'true' : 'false';
+    var radioWindow = document.getElementById('radio-window');
+    var radioMap = document.getElementById('radio-map');
+    if (radioWindow) radioWindow.setAttribute('aria-busy', busy);
+    if (radioMap) radioMap.setAttribute('aria-busy', busy);
+  }
+
+  function setRadioProgress(percent, text) {
+    if (!progressBarEl) return;
+    var current = parseInt(progressBarEl.getAttribute('aria-valuenow') || '0', 10);
+    var safePercent = percent == null ? current : Math.max(0, Math.min(100, Math.round(percent)));
+    progressBarEl.style.width = safePercent + '%';
+    progressBarEl.setAttribute('aria-valuenow', String(safePercent));
+    if (text) progressBarEl.setAttribute('aria-valuetext', text);
+    else progressBarEl.removeAttribute('aria-valuetext');
+  }
+
+  function assignClosestControlLabel(control) {
+    if (!control || !control.id) return;
+    var controlGroup = control.closest('.control-group');
+    var labelText = controlGroup ? controlGroup.querySelector('.label-text') : null;
+    if (!labelText) return;
+    if (!labelText.id) labelText.id = control.id + '-label';
+    control.setAttribute('aria-labelledby', labelText.id);
+
+    var hint = controlGroup ? controlGroup.querySelector('.radio-subhint') : null;
+    if (hint) {
+      if (!hint.id) hint.id = control.id + '-hint';
+      control.setAttribute('aria-describedby', hint.id);
+    }
+  }
+
+  function syncControlsToggleState() {
+    if (!controlsPanel || !controlsToggle) return;
+    setAriaExpanded(controlsToggle, !controlsPanel.classList.contains('collapsed'));
+  }
+
+  function syncAdvancedSettingsState() {
+    if (!advancedSettingsEl) return;
+    var summary = advancedSettingsEl.querySelector('summary');
+    if (!summary) return;
+    summary.setAttribute('aria-controls', 'radio-advanced-settings');
+    summary.setAttribute('aria-expanded', advancedSettingsEl.open ? 'true' : 'false');
+  }
+
+  function updatePatternPreviewAccessibility(caption) {
+    if (!patternDebugPreviewCanvas) return;
+    var label = t('radioPatternPreview');
+    patternDebugPreviewCanvas.setAttribute('role', 'img');
+    patternDebugPreviewCanvas.setAttribute('aria-label', caption ? label + ': ' + caption : label);
+  }
+
+  function initAccessibility() {
+    [
+      antennaInput,
+      radiusInput,
+      sectorAngleInput,
+      frequencySelect,
+      frequencyCustomInput,
+      resolutionSelect,
+      txPowerInput,
+      txGainInput,
+      rxGainInput,
+      rxGainPresetSelect,
+      rxHeightInput,
+      rxHeightPresetSelect,
+      rxSensitivityInput,
+      rxSensitivityPresetSelect,
+      climateSelect,
+      n0Input,
+      terrainPresetSelect,
+      terrainEpsilonInput,
+      terrainSigmaInput,
+      statModeSelect,
+      statTimeInput,
+      statLocationInput,
+      statSituationInput,
+      mdvarBaseSelect,
+      patternPresetSelect,
+      patternBearingInput,
+      itmEngineSelect,
+      polarizationSelect
+    ].forEach(assignClosestControlLabel);
+
+    if (patternRotateLeftBtn) patternRotateLeftBtn.setAttribute('aria-label', t('radioPatternDirection') + ' -15°');
+    if (patternRotateRightBtn) patternRotateRightBtn.setAttribute('aria-label', t('radioPatternDirection') + ' +15°');
+    if (patternFileStatusEl) {
+      patternFileStatusEl.setAttribute('role', 'status');
+      patternFileStatusEl.setAttribute('aria-live', 'polite');
+      patternFileStatusEl.setAttribute('aria-atomic', 'true');
+    }
+    if (helpPopoverEl) {
+      helpPopoverEl.setAttribute('role', 'tooltip');
+      helpPopoverEl.setAttribute('aria-hidden', 'true');
+    }
+    var helpButtonLabel = t('radioHelpButtonLabel');
+    document.querySelectorAll('.radio-help-tip').forEach(function (button) {
+      button.setAttribute('aria-label', helpButtonLabel);
+      button.setAttribute('aria-controls', 'radio-help-popover');
+      button.setAttribute('aria-expanded', 'false');
+    });
+
+    syncControlsToggleState();
+    syncAdvancedSettingsState();
+    updatePatternPreviewAccessibility(patternDebugCaptionEl ? patternDebugCaptionEl.textContent : '');
+    if (progressOverlayEl && progressOverlayEl.hidden) {
+      setRadioProgress(0, progressTextEl ? progressTextEl.textContent : '');
+    }
+  }
+
   // ===== Expose for app.js wiring =====
   window.RadioReach = {
     init: init,
@@ -220,10 +336,13 @@
     // Stats panel close button
     document.getElementById('radio-close-stats').addEventListener('click', function () {
       statsPanelEl.hidden = true;
+      if (analyzeBtnEl && !analyzeBtnEl.disabled) analyzeBtnEl.focus();
+      else if (clearBtnEl && !clearBtnEl.hidden) clearBtnEl.focus();
     });
     document.addEventListener('i18n:changed', function () {
       hideHelpPopover();
       updateTerrainCreditHtml();
+      initAccessibility();
       updateTxGainUi();
       updatePatternUi();
       renderPatternDebugPreview();
@@ -247,6 +366,7 @@
     updateEirpDisplay();
     updateTerrainCreditHtml();
     updateAnalysisWarning();
+    initAccessibility();
 
     // Controls panel toggle
     initControlsToggle();
@@ -264,10 +384,16 @@
       helpPopoverEl.className = 'radio-help-popover';
       document.body.appendChild(helpPopoverEl);
     }
+    helpPopoverEl.setAttribute('role', 'tooltip');
+    helpPopoverEl.setAttribute('aria-hidden', 'true');
 
     var helpButtons = document.querySelectorAll('.radio-help-tip');
+    var helpButtonLabel = t('radioHelpButtonLabel');
     for (var i = 0; i < helpButtons.length; i++) {
       var button = helpButtons[i];
+      button.setAttribute('aria-label', helpButtonLabel);
+      button.setAttribute('aria-controls', 'radio-help-popover');
+      button.setAttribute('aria-expanded', 'false');
       button.addEventListener('mouseenter', handleHelpTipEnter);
       button.addEventListener('focus', handleHelpTipEnter);
       button.addEventListener('mouseleave', handleHelpTipLeave);
@@ -320,6 +446,9 @@
     helpPopoverEl.textContent = tooltipText;
     helpPopoverEl.classList.add('is-visible');
     helpPopoverEl.classList.remove('flip-up');
+  helpPopoverEl.setAttribute('aria-hidden', 'false');
+  button.setAttribute('aria-describedby', 'radio-help-popover');
+  setAriaExpanded(button, true);
 
     var rect = button.getBoundingClientRect();
     var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -352,6 +481,11 @@
     helpPopoverEl.classList.remove('flip-up');
     helpPopoverEl.style.left = '';
     helpPopoverEl.style.top = '';
+    helpPopoverEl.setAttribute('aria-hidden', 'true');
+    document.querySelectorAll('.radio-help-tip[aria-describedby="radio-help-popover"]').forEach(function (button) {
+      button.removeAttribute('aria-describedby');
+      setAriaExpanded(button, false);
+    });
   }
 
   // ===== Map =====
@@ -446,12 +580,16 @@
         controlsPanel.style.transition = '';
         controlsToggle.style.transition = '';
         invalidateMap();
+        syncControlsToggleState();
       });
     }
+
+    syncControlsToggleState();
 
     controlsToggle.addEventListener('click', function () {
       controlsPanel.classList.toggle('collapsed');
       controlsToggle.classList.toggle('collapsed');
+      syncControlsToggleState();
       localStorage.setItem(storageKey, controlsPanel.classList.contains('collapsed') ? '1' : '0');
       requestAnimationFrame(function () {
         setTimeout(function () { invalidateMap(); }, 310);
@@ -466,9 +604,11 @@
     if (localStorage.getItem(storageKey) === '1') {
       advancedSettingsEl.open = true;
     }
+    syncAdvancedSettingsState();
 
     advancedSettingsEl.addEventListener('toggle', function () {
       localStorage.setItem(storageKey, advancedSettingsEl.open ? '1' : '0');
+      syncAdvancedSettingsState();
     });
   }
 
@@ -675,9 +815,18 @@
   }
 
   function updateStatisticalReadouts() {
-    if (statTimeValueEl && statTimeInput) statTimeValueEl.textContent = statTimeInput.value + '%';
-    if (statLocationValueEl && statLocationInput) statLocationValueEl.textContent = statLocationInput.value + '%';
-    if (statSituationValueEl && statSituationInput) statSituationValueEl.textContent = statSituationInput.value + '%';
+    if (statTimeValueEl && statTimeInput) {
+      statTimeValueEl.textContent = statTimeInput.value + '%';
+      statTimeInput.setAttribute('aria-valuetext', statTimeValueEl.textContent);
+    }
+    if (statLocationValueEl && statLocationInput) {
+      statLocationValueEl.textContent = statLocationInput.value + '%';
+      statLocationInput.setAttribute('aria-valuetext', statLocationValueEl.textContent);
+    }
+    if (statSituationValueEl && statSituationInput) {
+      statSituationValueEl.textContent = statSituationInput.value + '%';
+      statSituationInput.setAttribute('aria-valuetext', statSituationValueEl.textContent);
+    }
   }
 
   function updateMdvarUi() {
@@ -945,6 +1094,7 @@
       renderPatternDebugPreviewPlaceholder(ctx, cx, cy, outerRadius);
       caption = radioState.customPatternInvalid ? t('radioPatternInvalid') : t('radioPatternAwaitingFile');
       if (patternDebugCaptionEl) patternDebugCaptionEl.textContent = caption;
+      updatePatternPreviewAccessibility(caption);
       return;
     }
 
@@ -995,6 +1145,7 @@
     ctx.fill();
 
     if (patternDebugCaptionEl) patternDebugCaptionEl.textContent = caption;
+    updatePatternPreviewAccessibility(caption);
   }
 
   function getPatternConfig() {
@@ -1234,6 +1385,7 @@
       w: eirpW.toFixed(1),
       dbw: eirpDbW.toFixed(1)
     });
+    if (txPowerInput) txPowerInput.setAttribute('aria-describedby', eirpDisplayEl.id);
   }
 
   // ===== Map Click Handler =====
@@ -1536,9 +1688,10 @@
     statsPanelEl.hidden = true;
     if (legendEl) legendEl.hidden = true;
 
+    setAnalysisBusy(true);
     progressOverlayEl.hidden = false;
-    progressBarEl.style.width = '0%';
     progressTextEl.textContent = t('radioPhase1');
+    setRadioProgress(0, progressTextEl.textContent);
 
     removeOverlay();
 
@@ -1688,7 +1841,7 @@
 
   function handlePhase1Done(msg) {
     progressTextEl.textContent = t('radioPhase2');
-    progressBarEl.style.width = '15%';
+    setRadioProgress(15, progressTextEl.textContent);
   }
 
   function handlePhase2Done(msg) {
@@ -1698,7 +1851,7 @@
       text += ' ' + t('radioClampedNotice', { km: msg.clampedRadiusKm.toFixed(1) });
     }
     progressTextEl.textContent = text;
-    progressBarEl.style.width = '15%';
+    setRadioProgress(15, progressTextEl.textContent);
   }
 
   function handleCoverageBounds(msg) {
@@ -1716,7 +1869,7 @@
       msg.widthPx, msg.heightPx
     );
     progressTextEl.textContent = t('radioPhase3', { done: 0, total: radioState._totalCells || '?' });
-    progressBarEl.style.width = '20%';
+    setRadioProgress(20, progressTextEl.textContent);
   }
 
   function handleCoverageBatch(msg) {
@@ -1734,11 +1887,11 @@
     var totalCells = radioState._totalCells || 1;
     var pct = 20 + Math.round((radioState._propTotalEvaluated / totalCells) * 80);
     if (pct > 99) pct = 99;
-    progressBarEl.style.width = pct + '%';
     progressTextEl.textContent = t('radioPhase3', {
       done: radioState._propTotalEvaluated,
       total: totalCells
     });
+    setRadioProgress(pct, progressTextEl.textContent);
 
     var layer = radioState.canvasLayer;
     // Decode binary coverage: Float32Array with [x, y, band, ...] triples.
@@ -1790,11 +1943,11 @@
         radioState._sweepWedgesCompleted++;
         var emptyWedgePct = Math.round((radioState._sweepWedgesCompleted / radioState._sweepTotalWedges) * 100);
         if (emptyWedgePct > 99) emptyWedgePct = 99;
-        progressBarEl.style.width = emptyWedgePct + '%';
         progressTextEl.textContent = t('radioSweepProgress', {
           done: radioState._sweepWedgesCompleted,
           total: radioState._sweepTotalWedges
         });
+        setRadioProgress(emptyWedgePct, progressTextEl.textContent);
         radioState.worker.postMessage({ type: 'wedgeDone' });
       } else {
         handleDone({
@@ -2019,11 +2172,11 @@
         radioState._sweepWedgesCompleted++;
         var wedgePct = Math.round((radioState._sweepWedgesCompleted / radioState._sweepTotalWedges) * 100);
         if (wedgePct > 99) wedgePct = 99;
-        progressBarEl.style.width = wedgePct + '%';
         progressTextEl.textContent = t('radioSweepProgress', {
           done: radioState._sweepWedgesCompleted,
           total: radioState._sweepTotalWedges
         });
+        setRadioProgress(wedgePct, progressTextEl.textContent);
 
         // Signal orchestrator to advance to next wedge
         radioState.worker.postMessage({ type: 'wedgeDone' });
@@ -2081,6 +2234,7 @@
     var elapsed = performance.now() - radioState.startTime;
     analyzeBtnEl.disabled = false;
     clearBtnEl.hidden = false;
+    setAnalysisBusy(false);
     progressOverlayEl.hidden = true;
 
     if (radioState.canvasLayer) {
@@ -2128,6 +2282,7 @@
       radioState._timerInterval = null;
     }
     analyzeBtnEl.disabled = radioState.lat === null;
+    setAnalysisBusy(false);
     progressOverlayEl.hidden = true;
 
     if (msg.message === 'TILE_LIMIT') {
@@ -2199,9 +2354,10 @@
     if (patternMapControlEl) patternMapControlEl.hidden = true;
     clearBtnEl.hidden = true;
     if (clearDirectionBtn) clearDirectionBtn.hidden = true;
+    setAnalysisBusy(false);
     progressOverlayEl.hidden = true;
     statsPanelEl.hidden = true;
-    progressBarEl.style.width = '0%';
+    setRadioProgress(0, progressTextEl ? progressTextEl.textContent : '');
     if (legendEl) legendEl.hidden = true;
   }
 

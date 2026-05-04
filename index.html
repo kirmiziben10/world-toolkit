@@ -20,96 +20,99 @@
 </head>
 
 <body>
+  <div id="app-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
   <!-- Desktop Background (Bliss wallpaper) -->
-  <div id="desktop-bg"></div>
+  <div id="desktop-bg" aria-hidden="true"></div>
 
   <!-- Desktop Icons -->
   <div id="desktop-icons">
-    <div class="desktop-icon" id="icon-search-spots" title="Search for Spots" data-i18n-attr="title:searchForSpots">
-      <img src="assets/map_icon.svg" alt="Search" class="desktop-icon-img">
+    <button type="button" class="desktop-icon" id="icon-search-spots" title="Search for Spots" data-i18n-attr="title:searchForSpots" aria-controls="main-window" aria-haspopup="dialog" aria-expanded="false">
+      <img src="assets/map_icon.svg" alt="" aria-hidden="true" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="searchForSpots">Search for Spots</span>
-    </div>
-    <div class="desktop-icon" id="icon-starred-spots" title="Starred Spots" data-i18n-attr="title:starredSpots">
-      <img src="assets/star_icon.svg" alt="Starred" class="desktop-icon-img">
+    </button>
+    <button type="button" class="desktop-icon" id="icon-starred-spots" title="Starred Spots" data-i18n-attr="title:starredSpots" aria-controls="starred-window" aria-haspopup="dialog" aria-expanded="false">
+      <img src="assets/star_icon.svg" alt="" aria-hidden="true" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="starredSpots">Starred Spots</span>
-    </div>
-    <div class="desktop-icon" id="icon-loved-spots" title="Loved Spots" data-i18n-attr="title:lovedSpots">
-      <img src="assets/heart_icon.svg" alt="Loved" class="desktop-icon-img">
+    </button>
+    <button type="button" class="desktop-icon" id="icon-loved-spots" title="Loved Spots" data-i18n-attr="title:lovedSpots" aria-controls="loved-window" aria-haspopup="dialog" aria-expanded="false">
+      <img src="assets/heart_icon.svg" alt="" aria-hidden="true" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="lovedSpots">Loved Spots</span>
-    </div>
-    <div class="desktop-icon" id="icon-rocky" title="Rocky" data-i18n-attr="title:rocky">
-      <img src="assets/rocky_icon.svg" alt="Rocky" class="desktop-icon-img">
+    </button>
+    <button type="button" class="desktop-icon" id="icon-rocky" title="Rocky" data-i18n-attr="title:rocky">
+      <img src="assets/rocky_icon.svg" alt="" aria-hidden="true" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="rocky">Rocky</span>
-    </div>
-    <div class="desktop-icon" id="icon-radio-reach" title="Radio Reach" data-i18n-attr="title:radioReach">
-      <img src="assets/radio_icon.svg" alt="Radio" class="desktop-icon-img">
+    </button>
+    <button type="button" class="desktop-icon" id="icon-radio-reach" title="Radio Reach" data-i18n-attr="title:radioReach" aria-controls="radio-window" aria-haspopup="dialog" aria-expanded="false">
+      <img src="assets/radio_icon.svg" alt="" aria-hidden="true" class="desktop-icon-img">
       <span class="desktop-icon-label" data-i18n="radioReach">Radio Reach</span>
-    </div>
+    </button>
   </div>
 
   <!-- Leaflet trash menu -->
-  <div id="recycle-menu" class="recycle-menu" hidden>
-    <button class="recycle-menu-item" id="recycle-clear-all" data-i18n="clearAll">Clear All</button>
-    <button class="recycle-menu-item" id="recycle-clear-selection" data-i18n="clearSelection">Clear Selection</button>
+  <div id="recycle-menu" class="recycle-menu" tabindex="-1" hidden>
+    <button type="button" class="recycle-menu-item" id="recycle-clear-all" data-i18n="clearAll">Clear All</button>
+    <button type="button" class="recycle-menu-item" id="recycle-clear-selection" data-i18n="clearSelection">Clear Selection</button>
   </div>
 
   <!-- Search Bar (Win7 style) -->
-  <div id="search-bar">
-    <input type="text" id="search-input" placeholder="Search " readonly data-i18n-placeholder="searchPlaceholder">
-    <img src="assets/magnifier_icon.svg" alt="Search" class="search-magnifier">
+  <div id="search-bar" aria-hidden="true">
+    <input type="text" id="search-input" placeholder="Search " readonly tabindex="-1" aria-hidden="true" data-i18n-placeholder="searchPlaceholder">
+    <img src="assets/magnifier_icon.svg" alt="" aria-hidden="true" class="search-magnifier">
   </div>
 
   <!-- Earth Globe Widget (3D interactive — rendered by globe.js / p5.js) -->
   <div id="earth-globe"></div>
-  <div id="globe-attribution" class="globe-attribution"></div>
+  <div id="globe-attribution" class="globe-attribution" role="note"></div>
 
   <!-- Main Window -->
-  <div id="main-window" hidden>
+  <div id="main-window" hidden role="dialog" aria-modal="false" aria-labelledby="main-window-title" tabindex="-1">
     <!-- Titlebar -->
     <div id="window-titlebar">
       <div class="titlebar-leading">
-        <img src="assets/search_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text" data-i18n="searchForSpotsTitle">Search For Spots</span>
+        <img src="assets/search_icon.svg" alt="" aria-hidden="true" class="titlebar-icon">
+        <span class="titlebar-text" id="main-window-title" data-i18n="searchForSpotsTitle">Search For Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn" id="btn-help" title="Help" data-i18n-attr="title:help">
-          <img src="assets/help_icon.svg" alt="Help" width="20" height="20">
+        <button type="button" class="titlebar-btn" id="btn-help" title="Help" aria-label="Help" aria-expanded="false" data-i18n-attr="title:help,aria-label:help">
+          <img src="assets/help_icon.svg" alt="" aria-hidden="true" width="20" height="20">
         </button>
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-main" title="Maximize" data-i18n-attr="title:maximize">
+        <button type="button" class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-main" title="Maximize" aria-label="Maximize" data-i18n-attr="title:maximize,aria-label:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close" title="Close" data-i18n-attr="title:close">
-          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        <button type="button" class="titlebar-btn" id="btn-close" title="Close" aria-label="Close" data-i18n-attr="title:close,aria-label:close">
+          <img src="assets/close_icon.svg" alt="" aria-hidden="true" width="20" height="20">
         </button>
       </div>
     </div>
 
     <!-- Window Borders -->
-    <div class="window-border window-border-left"></div>
-    <div class="window-border window-border-right"></div>
-    <div class="window-border window-border-bottom"></div>
+    <div class="window-border window-border-left" aria-hidden="true"></div>
+    <div class="window-border window-border-right" aria-hidden="true"></div>
+    <div class="window-border window-border-bottom" aria-hidden="true"></div>
 
     <!-- Resize Handles -->
-    <div class="resize-handle resize-n"></div>
-    <div class="resize-handle resize-s"></div>
-    <div class="resize-handle resize-e"></div>
-    <div class="resize-handle resize-w"></div>
-    <div class="resize-handle resize-ne"></div>
-    <div class="resize-handle resize-nw"></div>
-    <div class="resize-handle resize-se"></div>
-    <div class="resize-handle resize-sw"></div>
+    <div class="resize-handle resize-n" aria-hidden="true"></div>
+    <div class="resize-handle resize-s" aria-hidden="true"></div>
+    <div class="resize-handle resize-e" aria-hidden="true"></div>
+    <div class="resize-handle resize-w" aria-hidden="true"></div>
+    <div class="resize-handle resize-ne" aria-hidden="true"></div>
+    <div class="resize-handle resize-nw" aria-hidden="true"></div>
+    <div class="resize-handle resize-se" aria-hidden="true"></div>
+    <div class="resize-handle resize-sw" aria-hidden="true"></div>
 
     <!-- Window Content -->
     <div id="window-content">
       <!-- Controls Panel (flush left side panel) -->
-      <div id="controls-toggle" class="controls-toggle" title="Toggle filters" data-i18n-attr="title:toggleFilters">
+      <button type="button" id="controls-toggle" class="controls-toggle" title="Toggle filters" aria-label="Toggle filters" aria-controls="controls-panel" aria-expanded="true" data-i18n-attr="title:toggleFilters,aria-label:toggleFilters">
         <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
         </svg>
-      </div>
-      <aside id="controls-panel">
+      </button>
+      <aside id="controls-panel" aria-labelledby="controls-panel-name">
+        <span id="controls-panel-name" class="sr-only" data-i18n="filtersRegionLabel">Filters</span>
         <div class="panel-content">
           <div class="slider-group-label" data-i18n="viewpointCriteria">Viewpoint Criteria</div>
 
@@ -170,39 +173,40 @@
           </div>
 
           <div class="undo-redo-row">
-            <button id="undo-btn" class="undo-redo-btn" title="Undo (Ctrl+Z)" disabled data-i18n="undo" data-i18n-attr="title:undoTooltip">↶ Undo</button>
-            <button id="redo-btn" class="undo-redo-btn" title="Redo (Ctrl+Shift+Z)" disabled data-i18n="redo" data-i18n-attr="title:redoTooltip">↷ Redo</button>
+            <button type="button" id="undo-btn" class="undo-redo-btn" title="Undo (Ctrl+Z)" disabled data-i18n="undo" data-i18n-attr="title:undoTooltip">↶ Undo</button>
+            <button type="button" id="redo-btn" class="undo-redo-btn" title="Redo (Ctrl+Shift+Z)" disabled data-i18n="redo" data-i18n-attr="title:redoTooltip">↷ Redo</button>
           </div>
 
-          <button id="analyze-btn" class="xp-primary-btn" disabled>
+          <button type="button" id="analyze-btn" class="xp-primary-btn" disabled>
             <span class="btn-text" data-i18n="analyzeArea">Analyze Area</span>
           </button>
 
-          <p id="search-terrain-credit" class="terrain-credit"></p>
+          <p id="search-terrain-credit" class="terrain-credit" role="note"></p>
 
         </div>
       </aside>
 
       <!-- Map fills the remaining space -->
-      <div id="map"></div>
+      <span id="map-region-name" class="sr-only" data-i18n="mapRegionLabel">Selection map</span>
+      <div id="map" role="region" tabindex="0" aria-labelledby="map-region-name" aria-describedby="search-terrain-credit"></div>
 
       <!-- Results Panel -->
-      <div id="results-panel" class="xp-panel" hidden>
+      <div id="results-panel" class="xp-panel" hidden role="region" aria-labelledby="results-panel-title">
         <div class="xp-panel-header">
-          <h2><span data-i18n="viewpoints">Viewpoints</span> <span id="results-count" class="badge">0</span></h2>
-          <button id="close-results" class="xp-icon-btn" title="Close" data-i18n-attr="title:close">✕</button>
+          <h2 id="results-panel-title"><span data-i18n="viewpoints">Viewpoints</span> <span id="results-count" class="badge">0</span></h2>
+          <button type="button" id="close-results" class="xp-icon-btn" title="Close" aria-label="Close" data-i18n-attr="title:close,aria-label:close">✕</button>
         </div>
-        <div id="results-list" class="results-list"></div>
+        <div id="results-list" class="results-list" aria-labelledby="results-panel-title"></div>
       </div>
 
       <!-- Progress Overlay -->
-      <div id="progress-overlay" hidden>
+      <div id="progress-overlay" hidden role="dialog" aria-modal="false" aria-labelledby="progress-title" aria-describedby="progress-text progress-detail">
         <div class="progress-card xp-dialog">
           <div class="progress-spinner"></div>
           <h3 id="progress-title" data-i18n="analyzingTerrain">Analyzing Terrain</h3>
           <p id="progress-text" data-i18n="preparing">Preparing...</p>
           <div class="progress-track">
-            <div id="progress-bar" class="progress-fill"></div>
+            <div id="progress-bar" class="progress-fill" role="progressbar" aria-labelledby="progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
           </div>
           <p id="progress-detail" class="progress-detail"></p>
         </div>
@@ -211,140 +215,141 @@
   </div>
 
   <!-- Loved Spots Window -->
-  <div id="loved-window" class="xp-window" hidden>
+  <div id="loved-window" class="xp-window" hidden role="dialog" aria-modal="false" aria-labelledby="loved-window-title" tabindex="-1">
     <div id="loved-window-titlebar" class="window-titlebar">
       <div class="titlebar-leading">
-        <img src="assets/heart_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text" data-i18n="lovedSpotsTitle">Loved Spots</span>
+        <img src="assets/heart_icon.svg" alt="" aria-hidden="true" class="titlebar-icon">
+        <span class="titlebar-text" id="loved-window-title" data-i18n="lovedSpotsTitle">Loved Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-loved" title="Maximize" data-i18n-attr="title:maximize">
+        <button type="button" class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-loved" title="Maximize" aria-label="Maximize" data-i18n-attr="title:maximize,aria-label:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-loved" title="Close" data-i18n-attr="title:close">
-          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        <button type="button" class="titlebar-btn" id="btn-close-loved" title="Close" aria-label="Close" data-i18n-attr="title:close,aria-label:close">
+          <img src="assets/close_icon.svg" alt="" aria-hidden="true" width="20" height="20">
         </button>
       </div>
     </div>
-    <div class="window-border window-border-left"></div>
-    <div class="window-border window-border-right"></div>
-    <div class="window-border window-border-bottom"></div>
-    <div class="resize-handle resize-n"></div>
-    <div class="resize-handle resize-s"></div>
-    <div class="resize-handle resize-e"></div>
-    <div class="resize-handle resize-w"></div>
-    <div class="resize-handle resize-ne"></div>
-    <div class="resize-handle resize-nw"></div>
-    <div class="resize-handle resize-se"></div>
-    <div class="resize-handle resize-sw"></div>
+    <div class="window-border window-border-left" aria-hidden="true"></div>
+    <div class="window-border window-border-right" aria-hidden="true"></div>
+    <div class="window-border window-border-bottom" aria-hidden="true"></div>
+    <div class="resize-handle resize-n" aria-hidden="true"></div>
+    <div class="resize-handle resize-s" aria-hidden="true"></div>
+    <div class="resize-handle resize-e" aria-hidden="true"></div>
+    <div class="resize-handle resize-w" aria-hidden="true"></div>
+    <div class="resize-handle resize-ne" aria-hidden="true"></div>
+    <div class="resize-handle resize-nw" aria-hidden="true"></div>
+    <div class="resize-handle resize-se" aria-hidden="true"></div>
+    <div class="resize-handle resize-sw" aria-hidden="true"></div>
     <div class="xp-window-content">
       <div class="xp-panel-header">
-        <h2><span data-i18n="lovedSpots">Loved Spots</span> <span id="loved-count" class="badge">0</span></h2>
+        <h2 id="loved-panel-title"><span data-i18n="lovedSpots">Loved Spots</span> <span id="loved-count" class="badge">0</span></h2>
       </div>
-      <div id="loved-list" class="results-list"></div>
+      <div id="loved-list" class="results-list" aria-labelledby="loved-panel-title"></div>
     </div>
   </div>
 
   <!-- Starred Spots Window -->
-  <div id="starred-window" class="xp-window" hidden>
+  <div id="starred-window" class="xp-window" hidden role="dialog" aria-modal="false" aria-labelledby="starred-window-title" tabindex="-1">
     <div id="starred-window-titlebar" class="window-titlebar">
       <div class="titlebar-leading">
-        <img src="assets/star_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text" data-i18n="starredSpotsTitle">Starred Spots</span>
+        <img src="assets/star_icon.svg" alt="" aria-hidden="true" class="titlebar-icon">
+        <span class="titlebar-text" id="starred-window-title" data-i18n="starredSpotsTitle">Starred Spots</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-starred" title="Maximize" data-i18n-attr="title:maximize">
+        <button type="button" class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-starred" title="Maximize" aria-label="Maximize" data-i18n-attr="title:maximize,aria-label:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-starred" title="Close" data-i18n-attr="title:close">
-          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        <button type="button" class="titlebar-btn" id="btn-close-starred" title="Close" aria-label="Close" data-i18n-attr="title:close,aria-label:close">
+          <img src="assets/close_icon.svg" alt="" aria-hidden="true" width="20" height="20">
         </button>
       </div>
     </div>
-    <div class="window-border window-border-left"></div>
-    <div class="window-border window-border-right"></div>
-    <div class="window-border window-border-bottom"></div>
-    <div class="resize-handle resize-n"></div>
-    <div class="resize-handle resize-s"></div>
-    <div class="resize-handle resize-e"></div>
-    <div class="resize-handle resize-w"></div>
-    <div class="resize-handle resize-ne"></div>
-    <div class="resize-handle resize-nw"></div>
-    <div class="resize-handle resize-se"></div>
-    <div class="resize-handle resize-sw"></div>
+    <div class="window-border window-border-left" aria-hidden="true"></div>
+    <div class="window-border window-border-right" aria-hidden="true"></div>
+    <div class="window-border window-border-bottom" aria-hidden="true"></div>
+    <div class="resize-handle resize-n" aria-hidden="true"></div>
+    <div class="resize-handle resize-s" aria-hidden="true"></div>
+    <div class="resize-handle resize-e" aria-hidden="true"></div>
+    <div class="resize-handle resize-w" aria-hidden="true"></div>
+    <div class="resize-handle resize-ne" aria-hidden="true"></div>
+    <div class="resize-handle resize-nw" aria-hidden="true"></div>
+    <div class="resize-handle resize-se" aria-hidden="true"></div>
+    <div class="resize-handle resize-sw" aria-hidden="true"></div>
     <div class="xp-window-content">
       <div class="xp-panel-header">
-        <h2><span data-i18n="starredSpots">Starred Spots</span> <span id="starred-count" class="badge">0</span></h2>
+        <h2 id="starred-panel-title"><span data-i18n="starredSpots">Starred Spots</span> <span id="starred-count" class="badge">0</span></h2>
       </div>
-      <div id="starred-list" class="results-list"></div>
+      <div id="starred-list" class="results-list" aria-labelledby="starred-panel-title"></div>
     </div>
   </div>
 
   <!-- Help Tooltip -->
-  <div id="help-tooltip" class="help-tooltip" hidden>
+  <div id="help-tooltip" class="help-tooltip" hidden role="tooltip">
     <p class="help-tooltip-title"></p>
     <ol class="help-tooltip-list" id="help-tooltip-list"></ol>
     <div id="help-tooltip-footer" class="help-tooltip-footer" hidden></div>
   </div>
 
   <!-- Radio Reach Window -->
-  <div id="radio-window" class="xp-window" hidden>
+  <div id="radio-window" class="xp-window" hidden role="dialog" aria-modal="false" aria-labelledby="radio-window-title" tabindex="-1">
     <div id="radio-window-titlebar" class="window-titlebar">
       <div class="titlebar-leading">
-        <img src="assets/radio_icon.svg" alt="" class="titlebar-icon">
-        <span class="titlebar-text" data-i18n="radioReachTitle">Radio Reach</span>
+        <img src="assets/radio_icon.svg" alt="" aria-hidden="true" class="titlebar-icon">
+        <span class="titlebar-text" id="radio-window-title" data-i18n="radioReachTitle">Radio Reach</span>
       </div>
       <div class="titlebar-trailing">
-        <button class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-radio" aria-label="Maximize" data-i18n-attr="aria-label:maximize">
+        <button type="button" class="titlebar-btn titlebar-btn-maximize" id="btn-maximize-radio" aria-label="Maximize" data-i18n-attr="aria-label:maximize">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="white" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="titlebar-btn" id="btn-close-radio" aria-label="Close" data-i18n-attr="aria-label:close">
-          <img src="assets/close_icon.svg" alt="Close" width="20" height="20">
+        <button type="button" class="titlebar-btn" id="btn-close-radio" aria-label="Close" data-i18n-attr="aria-label:close">
+          <img src="assets/close_icon.svg" alt="" aria-hidden="true" width="20" height="20">
         </button>
       </div>
     </div>
-    <div class="window-border window-border-left"></div>
-    <div class="window-border window-border-right"></div>
-    <div class="window-border window-border-bottom"></div>
-    <div class="resize-handle resize-n"></div>
-    <div class="resize-handle resize-s"></div>
-    <div class="resize-handle resize-e"></div>
-    <div class="resize-handle resize-w"></div>
-    <div class="resize-handle resize-ne"></div>
-    <div class="resize-handle resize-nw"></div>
-    <div class="resize-handle resize-se"></div>
-    <div class="resize-handle resize-sw"></div>
+    <div class="window-border window-border-left" aria-hidden="true"></div>
+    <div class="window-border window-border-right" aria-hidden="true"></div>
+    <div class="window-border window-border-bottom" aria-hidden="true"></div>
+    <div class="resize-handle resize-n" aria-hidden="true"></div>
+    <div class="resize-handle resize-s" aria-hidden="true"></div>
+    <div class="resize-handle resize-e" aria-hidden="true"></div>
+    <div class="resize-handle resize-w" aria-hidden="true"></div>
+    <div class="resize-handle resize-ne" aria-hidden="true"></div>
+    <div class="resize-handle resize-nw" aria-hidden="true"></div>
+    <div class="resize-handle resize-se" aria-hidden="true"></div>
+    <div class="resize-handle resize-sw" aria-hidden="true"></div>
 
     <!-- Window Content (flex container: controls sidebar + map) -->
     <div id="radio-window-content">
       <!-- Toggle Chevron -->
-      <div id="radio-controls-toggle" class="controls-toggle" role="button" aria-label="Toggle filters" data-i18n-attr="aria-label:toggleFilters">
+      <button type="button" id="radio-controls-toggle" class="controls-toggle" aria-label="Toggle filters" aria-controls="radio-controls-panel" aria-expanded="true" data-i18n-attr="aria-label:toggleFilters">
         <svg class="controls-toggle-chevron" width="10" height="18" viewBox="0 0 10 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1L2 9M8 17L2 9" stroke="#D5B456" stroke-width="2" stroke-linecap="round"/>
         </svg>
-      </div>
+      </button>
 
-      <div id="radio-pattern-map-control" class="radio-pattern-map-control" hidden>
-        <span class="radio-pattern-map-label" data-i18n="radioPatternDirection">Pattern Direction</span>
+      <div id="radio-pattern-map-control" class="radio-pattern-map-control" role="group" aria-labelledby="radio-pattern-map-label" hidden>
+        <span id="radio-pattern-map-label" class="radio-pattern-map-label" data-i18n="radioPatternDirection">Pattern Direction</span>
         <div class="radio-pattern-map-actions">
-          <button id="radio-pattern-rotate-left" type="button" class="radio-pattern-map-btn">-15&deg;</button>
-          <span id="radio-pattern-map-readout" class="radio-pattern-map-readout">0&deg;</span>
-          <button id="radio-pattern-rotate-right" type="button" class="radio-pattern-map-btn">+15&deg;</button>
+          <button id="radio-pattern-rotate-left" type="button" class="radio-pattern-map-btn" aria-controls="radio-pattern-bearing">-15&deg;</button>
+          <span id="radio-pattern-map-readout" class="radio-pattern-map-readout" role="status" aria-live="polite" aria-atomic="true">0&deg;</span>
+          <button id="radio-pattern-rotate-right" type="button" class="radio-pattern-map-btn" aria-controls="radio-pattern-bearing">+15&deg;</button>
         </div>
       </div>
 
       <!-- Controls Panel (left sidebar) -->
-      <aside id="radio-controls-panel">
+      <aside id="radio-controls-panel" aria-labelledby="radio-controls-panel-name">
+        <span id="radio-controls-panel-name" class="sr-only" data-i18n="radioFiltersRegionLabel">Radio settings</span>
         <div class="panel-content">
           <div class="slider-group-label" data-i18n="radioTransmitter">Transmitter</div>
 
-          <p class="radio-instruction" id="radio-instruction" data-i18n="radioClickToBegin">Click on the map to place your transmitter.</p>
+          <p class="radio-instruction" id="radio-instruction" role="status" aria-live="polite" aria-atomic="true" data-i18n="radioClickToBegin">Click on the map to place your transmitter.</p>
           <p class="radio-coords" id="radio-coords" hidden></p>
 
           <div class="controls-grid">
@@ -368,7 +373,7 @@
             <div class="control-group control-group-full" id="radio-tx-gain-group">
               <div class="radio-label-row">
                 <span class="label-text" data-i18n="radioTxAntennaGain">TX Antenna Gain</span>
-                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxAntennaGain,aria-label:radioHelpTxAntennaGain">?</button>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxAntennaGain">?</button>
               </div>
               <div class="radio-input-row">
                 <input type="number" id="radio-tx-gain" min="-10" max="30" value="0" step="0.5">
@@ -379,7 +384,7 @@
                   <input type="checkbox" id="radio-tx-gain-auto" checked>
                   <span data-i18n="radioTxGainUsePattern">Use typical gain from the selected pattern</span>
                 </label>
-                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxGainAuto,aria-label:radioHelpTxGainAuto">?</button>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpTxGainAuto">?</button>
               </div>
               <p id="radio-tx-gain-hint" class="radio-subhint"></p>
             </div>
@@ -387,7 +392,7 @@
             <div class="control-group">
               <div class="radio-label-row">
                 <span class="label-text" data-i18n="radioAnalysisRadius">Analysis Radius</span>
-                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAnalysisRadius,aria-label:radioHelpAnalysisRadius">?</button>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAnalysisRadius">?</button>
               </div>
               <div class="radio-input-row">
                 <input type="number" id="radio-radius" min="5" max="1000" value="30" step="1">
@@ -398,7 +403,7 @@
             <div class="control-group">
               <div class="radio-label-row">
                 <span class="label-text" data-i18n="radioSectorAngle">Sector Angle</span>
-                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSectorAngle,aria-label:radioHelpSectorAngle">?</button>
+                <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSectorAngle">?</button>
               </div>
               <div class="radio-input-row">
                 <input type="number" id="radio-sector-angle" min="1" max="360" value="60" step="1">
@@ -453,7 +458,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioResolution">Resolution</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpResolution,aria-label:radioHelpResolution">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpResolution">?</button>
                       </div>
                       <select id="radio-resolution" class="radio-select">
                         <option value="auto" selected data-i18n="radioResAuto">Auto</option>
@@ -468,7 +473,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioEngine">ITM Engine</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpEngine,aria-label:radioHelpEngine">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpEngine">?</button>
                       </div>
                       <select id="radio-itm-engine" class="radio-select">
                         <option value="wasm" selected data-i18n="radioEngineWasm">WASM</option>
@@ -479,7 +484,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioPolarization">Polarization</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPolarization,aria-label:radioHelpPolarization">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPolarization">?</button>
                       </div>
                       <select id="radio-polarization" class="radio-select">
                         <option value="1" selected data-i18n="radioPolarizationVertical">Vertical</option>
@@ -493,7 +498,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioClimate">Climate</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpClimate,aria-label:radioHelpClimate">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpClimate">?</button>
                       </div>
                       <select id="radio-climate" class="radio-select">
                         <option value="1" data-i18n="radioClimateEquatorial">Equatorial</option>
@@ -509,7 +514,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioSurfaceRefractivity">Surface Refractivity (N0)</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSurfaceRefractivity,aria-label:radioHelpSurfaceRefractivity">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSurfaceRefractivity">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-n0" min="250" max="400" value="301" step="1">
@@ -520,7 +525,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioGroundType">Ground Type</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundType,aria-label:radioHelpGroundType">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundType">?</button>
                       </div>
                       <select id="radio-terrain-preset" class="radio-select">
                         <option value="average" selected data-i18n="radioGroundAverage">Average Ground</option>
@@ -535,7 +540,7 @@
                     <div class="control-group" id="radio-terrain-epsilon-group" hidden>
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioGroundPermittivity">Ground Permittivity</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundPermittivity,aria-label:radioHelpGroundPermittivity">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundPermittivity">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-terrain-epsilon" min="1" max="100" value="15" step="0.1">
@@ -545,7 +550,7 @@
                     <div class="control-group" id="radio-terrain-sigma-group" hidden>
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioGroundConductivity">Ground Conductivity</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundConductivity,aria-label:radioHelpGroundConductivity">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpGroundConductivity">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-terrain-sigma" min="0.0001" max="10" value="0.008" step="0.001">
@@ -558,7 +563,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioStatisticalModePreset">Mode Preset</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatMode,aria-label:radioHelpStatMode">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatMode">?</button>
                       </div>
                       <select id="radio-stat-mode" class="radio-select">
                         <option value="median" selected data-i18n="radioStatModeMedian">Median (50/50/50)</option>
@@ -572,7 +577,7 @@
                     <div class="control-group control-group-full" id="radio-stat-time-group" hidden>
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioStatTime">Time</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatTime,aria-label:radioHelpStatTime">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatTime">?</button>
                       </div>
                       <div class="radio-slider-row">
                         <input type="range" id="radio-stat-time" min="1" max="99" value="50" step="1">
@@ -583,7 +588,7 @@
                     <div class="control-group control-group-full" id="radio-stat-location-group" hidden>
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioStatLocation">Location</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatLocation,aria-label:radioHelpStatLocation">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatLocation">?</button>
                       </div>
                       <div class="radio-slider-row">
                         <input type="range" id="radio-stat-location" min="1" max="99" value="50" step="1">
@@ -594,7 +599,7 @@
                     <div class="control-group control-group-full" id="radio-stat-situation-group" hidden>
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioStatSituation">Situation</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatSituation,aria-label:radioHelpStatSituation">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpStatSituation">?</button>
                       </div>
                       <div class="radio-slider-row">
                         <input type="range" id="radio-stat-situation" min="1" max="99" value="50" step="1">
@@ -607,7 +612,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioMdvarBase">Base Mode</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarBase,aria-label:radioHelpMdvarBase">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarBase">?</button>
                       </div>
                       <div class="radio-input-row">
                         <select id="radio-mdvar-base" class="radio-select">
@@ -626,7 +631,7 @@
                           <input type="checkbox" id="radio-mdvar-location">
                           <span data-i18n="radioMdvarLocationModifier">Disable location variability (+10)</span>
                         </label>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarLocationModifier,aria-label:radioHelpMdvarLocationModifier">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarLocationModifier">?</button>
                       </div>
                     </div>
 
@@ -636,7 +641,7 @@
                           <input type="checkbox" id="radio-mdvar-situation">
                           <span data-i18n="radioMdvarSituationModifier">Disable direct situation variability (+20)</span>
                         </label>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarSituationModifier,aria-label:radioHelpMdvarSituationModifier">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpMdvarSituationModifier">?</button>
                       </div>
                     </div>
 
@@ -645,7 +650,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioRxAntennaHeight">RX Antenna Height</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxHeight,aria-label:radioHelpRxHeight">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxHeight">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-rx-height" min="0" max="100" value="2" step="0.5">
@@ -663,7 +668,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioRxAntennaGain">RX Antenna Gain</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxGain,aria-label:radioHelpRxGain">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxGain">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-rx-gain" min="-10" max="30" value="0" step="0.5">
@@ -681,7 +686,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioRxSensitivity">RX Sensitivity</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxSensitivity,aria-label:radioHelpRxSensitivity">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpRxSensitivity">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-rx-sensitivity" min="-150" max="-50" value="-110" step="1">
@@ -701,7 +706,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioPatternPreset">Pattern Preset</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreset,aria-label:radioHelpPatternPreset">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreset">?</button>
                       </div>
                       <select id="radio-pattern-preset" class="radio-select">
                         <option value="omni" selected data-i18n="radioPatternOmni">Omnidirectional</option>
@@ -717,7 +722,7 @@
                     <div class="control-group">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioPatternDirection">Pattern Direction</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternDirection,aria-label:radioHelpPatternDirection">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternDirection">?</button>
                       </div>
                       <div class="radio-input-row">
                         <input type="number" id="radio-pattern-bearing" min="0" max="359" value="0" step="1">
@@ -740,7 +745,7 @@
                           <input type="checkbox" id="radio-radar-sweep">
                           <span data-i18n="radioSweepMode">Sweep mode</span>
                         </label>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSweepMode,aria-label:radioHelpSweepMode">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpSweepMode">?</button>
                       </div>
                     </div>
 
@@ -750,7 +755,7 @@
                           <input type="checkbox" id="radio-adaptive-culling" checked>
                           <span data-i18n="radioAdaptiveCulling">Adaptive culling</span>
                         </label>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAdaptiveCulling,aria-label:radioHelpAdaptiveCulling">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpAdaptiveCulling">?</button>
                       </div>
                     </div>
 
@@ -760,7 +765,7 @@
                           <input type="checkbox" id="radio-fast-fill" checked>
                           <span data-i18n="radioFastFill">Fast-fill strong blocks</span>
                         </label>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpFastFill,aria-label:radioHelpFastFill">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpFastFill">?</button>
                       </div>
                     </div>
 
@@ -769,7 +774,7 @@
                     <div class="control-group control-group-full">
                       <div class="radio-label-row">
                         <span class="label-text" data-i18n="radioPatternPreview">Pattern preview</span>
-                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreview,aria-label:radioHelpPatternPreview">?</button>
+                        <button type="button" class="radio-help-tip" data-i18n-attr="data-tooltip:radioHelpPatternPreview">?</button>
                       </div>
                       <div class="radio-pattern-preview">
                         <canvas id="radio-pattern-debug-preview" class="radio-pattern-preview-canvas" width="160" height="160"></canvas>
@@ -817,9 +822,9 @@
             </div>
           </div>
 
-          <div id="radio-warning" class="radio-warning" hidden></div>
+          <div id="radio-warning" class="radio-warning" role="alert" aria-atomic="true" hidden></div>
 
-          <button id="radio-analyze-btn" class="xp-primary-btn" disabled>
+          <button type="button" id="radio-analyze-btn" class="xp-primary-btn" disabled>
             <span class="btn-text" data-i18n="radioAnalyze">Analyze</span>
           </button>
 
@@ -838,31 +843,32 @@
             </div>
           </div>
 
-          <button id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
-          <p id="radio-terrain-credit" class="radio-subhint radio-terrain-credit"></p>
+          <button type="button" id="radio-clear-btn" class="xp-secondary-btn" hidden data-i18n="radioClear">Clear</button>
+          <p id="radio-terrain-credit" class="radio-subhint radio-terrain-credit" role="note"></p>
         </div>
       </aside>
 
       <!-- Map fills the remaining space -->
-      <div id="radio-map"></div>
+      <span id="radio-map-region-name" class="sr-only" data-i18n="radioMapRegionLabel">Radio map</span>
+      <div id="radio-map" role="region" tabindex="0" aria-labelledby="radio-map-region-name" aria-describedby="radio-instruction radio-coords radio-warning"></div>
 
       <!-- Stats Panel (bottom-right overlay) -->
-      <div id="radio-stats-panel" class="xp-panel" hidden>
+      <div id="radio-stats-panel" class="xp-panel" hidden role="region" aria-labelledby="radio-stats-title">
         <div class="xp-panel-header">
-          <h2 data-i18n="radioResults">Results</h2>
-          <button id="radio-close-stats" class="xp-icon-btn" aria-label="Close" data-i18n-attr="aria-label:close">✕</button>
+          <h2 id="radio-stats-title" data-i18n="radioResults">Results</h2>
+          <button type="button" id="radio-close-stats" class="xp-icon-btn" aria-label="Close" data-i18n-attr="aria-label:close">✕</button>
         </div>
-        <div id="radio-stats" class="radio-stats-body"></div>
+        <div id="radio-stats" class="radio-stats-body" role="status" aria-live="polite" aria-atomic="true"></div>
       </div>
 
       <!-- Progress Overlay (centered dialog) -->
-      <div id="radio-progress-overlay" hidden>
+      <div id="radio-progress-overlay" hidden role="dialog" aria-modal="false" aria-labelledby="radio-progress-title" aria-describedby="radio-progress-text">
         <div class="progress-card xp-dialog">
           <div class="progress-spinner"></div>
-          <h3 data-i18n="radioAnalyzing">Analyzing Coverage</h3>
+          <h3 id="radio-progress-title" data-i18n="radioAnalyzing">Analyzing Coverage</h3>
           <p id="radio-progress-text" data-i18n="preparing">Preparing...</p>
           <div class="progress-track">
-            <div id="radio-progress-bar" class="progress-fill"></div>
+            <div id="radio-progress-bar" class="progress-fill" role="progressbar" aria-labelledby="radio-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
           </div>
         </div>
       </div>

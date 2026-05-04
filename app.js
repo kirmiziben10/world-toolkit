@@ -36,6 +36,7 @@ let analyzeBtnTextEl = null;
 let undoBtnEl = null;
 let redoBtnEl = null;
 let layerControl = null;
+let announcerFrame = null;
 
 // ===== State =====
 const state = {
@@ -56,6 +57,33 @@ const state = {
   editDebounce: null,
   baseLayers: null,
 };
+
+function announce(message) {
+  const announcer = document.getElementById('app-announcer');
+  if (!announcer || !message) return;
+  announcer.textContent = '';
+  if (announcerFrame != null) cancelAnimationFrame(announcerFrame);
+  announcerFrame = requestAnimationFrame(() => {
+    announcer.textContent = message;
+    announcerFrame = null;
+  });
+}
+
+function setExpandedState(element, expanded) {
+  if (!element) return;
+  element.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function focusWindowElement(winEl) {
+  if (!winEl || typeof winEl.focus !== 'function') return;
+  requestAnimationFrame(() => {
+    try {
+      winEl.focus({ preventScroll: true });
+    } catch {
+      winEl.focus();
+    }
+  });
+}
 
 // ===== localStorage Persistence =====
 function saveLiked() {
@@ -299,6 +327,18 @@ function rebuildLayerControl() {
   }
   layerControl = L.control.layers(getLocalizedBaseLayers(), null, { position: 'topright' });
   layerControl.addTo(state.map);
+  setTimeout(syncMapControlAccessibility, 0);
+}
+
+function syncMapControlAccessibility() {
+  const controls = document.querySelectorAll(
+    '.leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-control-layers-toggle, .leaflet-draw-toolbar a, .leaflet-draw-actions a'
+  );
+  controls.forEach((control) => {
+    const label = control.getAttribute('title') || control.getAttribute('aria-label') || control.textContent.trim();
+    if (!label) return;
+    control.setAttribute('aria-label', label);
+  });
 }
 
 function normalizeBaseLayerKey(value) {
@@ -355,6 +395,7 @@ function initDrawControls() {
   });
 
   state.map.addControl(drawControl);
+  setTimeout(syncMapControlAccessibility, 0);
 
   state.map.on(L.Draw.Event.CREATED, (e) => {
     state.drawnItems.clearLayers();
@@ -457,10 +498,18 @@ function initSliders() {
     const input = document.getElementById(id);
     const display = document.getElementById(`${id}-val`);
     const container = input.closest('.slider-track-container');
+    const label = input.closest('.control-group')?.querySelector('.label-text');
     const { positionThumb } = buildCustomSlider(container, input);
-    input.addEventListener('input', () => {
-      display.textContent = input.value + suffix;
-    });
+    if (label && !label.id) label.id = `${id}-label`;
+    if (label) input.setAttribute('aria-labelledby', `${label.id} ${display.id}`);
+
+    const syncSliderValue = () => {
+      const valueText = input.value + suffix;
+      display.textContent = valueText;
+      input.setAttribute('aria-valuetext', valueText);
+    };
+    input.addEventListener('input', syncSliderValue);
+    syncSliderValue();
 
     // Editable label — click to type a value directly
     display.style.cursor = 'pointer';
@@ -469,6 +518,7 @@ function initSliders() {
       editInput.type = 'number';
       editInput.className = 'label-value label-value-edit';
       editInput.value = input.value;
+      if (label) editInput.setAttribute('aria-label', label.textContent);
       editInput.style.width = display.offsetWidth + 'px';
       display.replaceWith(editInput);
       editInput.focus();
@@ -609,43 +659,75 @@ function initButtons() {
 
   // Leaflet trash button — intercept click to show menu
   const recycleMenu = document.getElementById('recycle-menu');
+  const resultsPanel = document.getElementById('results-panel');
+  const controlsPanel = document.getElementById('controls-panel');
+  const controlsToggle = document.getElementById('controls-toggle');
+  const helpButton = document.getElementById('btn-help');
+  let trashBtn = null;
+
+  const syncControlsToggleState = () => {
+    setExpandedState(controlsToggle, !controlsPanel.classList.contains('collapsed'));
+  };
+
+  const setRecycleMenuOpen = (open) => {
+    recycleMenu.hidden = !open;
+    setExpandedState(trashBtn, open);
+  };
 
   // Wait for Leaflet.Draw to render, then hijack the trash button
   setTimeout(() => {
-    const trashBtn = document.querySelector('.leaflet-draw-edit-remove');
+    trashBtn = document.querySelector('.leaflet-draw-edit-remove');
     if (!trashBtn) return;
+
+    trashBtn.setAttribute('aria-haspopup', 'true');
+    trashBtn.setAttribute('aria-controls', 'recycle-menu');
+    setExpandedState(trashBtn, false);
 
     trashBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (!recycleMenu.hidden) { recycleMenu.hidden = true; return; }
+      if (!recycleMenu.hidden) {
+        setRecycleMenuOpen(false);
+        return;
+      }
       const btnRect = trashBtn.getBoundingClientRect();
       // Briefly show off-screen to measure width
       recycleMenu.style.visibility = 'hidden';
-      recycleMenu.hidden = false;
+      setRecycleMenuOpen(true);
       const menuW = recycleMenu.offsetWidth;
       recycleMenu.style.visibility = '';
       recycleMenu.style.left = (btnRect.left - menuW - 4) + 'px';
       recycleMenu.style.top = btnRect.top + 'px';
-      document.getElementById('recycle-clear-all').disabled =
-        state.resultMarkers.length === 0 && !state.selectionBounds;
-      document.getElementById('recycle-clear-selection').disabled = !state.selectionBounds;
+      const clearAllBtn = document.getElementById('recycle-clear-all');
+      const clearSelectionBtn = document.getElementById('recycle-clear-selection');
+      clearAllBtn.disabled = state.resultMarkers.length === 0 && !state.selectionBounds;
+      clearSelectionBtn.disabled = !state.selectionBounds;
+      const focusTarget = !clearAllBtn.disabled
+        ? clearAllBtn
+        : (!clearSelectionBtn.disabled ? clearSelectionBtn : recycleMenu);
+      focusTarget.focus();
     }, true); // capture phase to beat Leaflet's handler
   }, 0);
+
+  recycleMenu.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    setRecycleMenuOpen(false);
+    if (trashBtn) trashBtn.focus();
+  });
 
   // Dismiss menu on outside click
   document.addEventListener('click', (e) => {
     if (!recycleMenu.hidden && !recycleMenu.contains(e.target) &&
         !e.target.closest('.leaflet-draw-edit-remove')) {
-      recycleMenu.hidden = true;
+      setRecycleMenuOpen(false);
     }
   });
 
   // Clear All — remove results + selection
   document.getElementById('recycle-clear-all').addEventListener('click', () => {
-    recycleMenu.hidden = true;
+    setRecycleMenuOpen(false);
     clearResults();
-    document.getElementById('results-panel').hidden = true;
+    resultsPanel.hidden = true;
     state.drawnItems.clearLayers();
     state.selectionBounds = null;
     state.boundsHistory = [null];
@@ -656,7 +738,7 @@ function initButtons() {
 
   // Clear Selection — remove rectangle but keep result points
   document.getElementById('recycle-clear-selection').addEventListener('click', () => {
-    recycleMenu.hidden = true;
+    setRecycleMenuOpen(false);
     state.drawnItems.clearLayers();
     state.selectionBounds = null;
     state.boundsHistory = [null];
@@ -668,12 +750,11 @@ function initButtons() {
   });
 
   document.getElementById('close-results').addEventListener('click', () => {
-    document.getElementById('results-panel').hidden = true;
+    resultsPanel.hidden = true;
+    if (analyzeBtnEl) analyzeBtnEl.focus();
   });
 
   // Controls panel toggle — restore saved state (suppress transition on load)
-  const controlsPanel = document.getElementById('controls-panel');
-  const controlsToggle = document.getElementById('controls-toggle');
   if (IS_MOBILE || localStorage.getItem('sv_filters_collapsed') === '1') {
     controlsPanel.style.transition = 'none';
     controlsToggle.style.transition = 'none';
@@ -683,11 +764,14 @@ function initButtons() {
       controlsPanel.style.transition = '';
       controlsToggle.style.transition = '';
       if (state.map) state.map.invalidateSize();
+      syncControlsToggleState();
     });
   }
+  syncControlsToggleState();
   controlsToggle.addEventListener('click', () => {
     controlsPanel.classList.toggle('collapsed');
     controlsToggle.classList.toggle('collapsed');
+    syncControlsToggleState();
     localStorage.setItem('sv_filters_collapsed', controlsPanel.classList.contains('collapsed') ? '1' : '0');
     // Let the map reclaim/yield the space
     requestAnimationFrame(() => {
@@ -736,6 +820,7 @@ function initButtons() {
       openWindow(win, document.getElementById('icon-search-spots'));
     } else {
       win.style.zIndex = getTopZ();
+      updateWindowToggleState(win.id);
     }
   });
 
@@ -776,6 +861,7 @@ function initButtons() {
       openWindow(win, document.getElementById('icon-radio-reach'));
     } else {
       win.style.zIndex = getTopZ();
+      updateWindowToggleState(win.id);
     }
     if (window.RadioReach) {
       window.RadioReach.invalidateMap();
@@ -811,6 +897,8 @@ function initButtons() {
       document.getElementById(id).style.zIndex = getTopZ();
     });
   });
+
+  syncWindowToggleStates();
 }
 
 let _topZ = 300;
@@ -845,6 +933,7 @@ function openSavedPanel(type) {
     openWindow(win, icon);
   } else {
     win.style.zIndex = getTopZ();
+    updateWindowToggleState(winId);
   }
   renderSavedPanel(type);
 }
@@ -858,11 +947,25 @@ const ICON_MAP = {
   'radio-window':   'icon-radio-reach',
 };
 
+function updateWindowToggleState(winId) {
+  const winEl = document.getElementById(winId);
+  const iconId = ICON_MAP[winId];
+  const iconEl = iconId ? document.getElementById(iconId) : null;
+  if (!winEl || !iconEl) return;
+  setExpandedState(iconEl, !winEl.hidden);
+}
+
+function syncWindowToggleStates() {
+  Object.keys(ICON_MAP).forEach(updateWindowToggleState);
+}
+
 function openWindow(winEl, iconEl) {
+  updateWindowToggleState(winEl.id);
   if (!IS_MOBILE) localStorage.setItem('sv_win_open_' + winEl.id, 'true');
   if (IS_MOBILE) {
     winEl.classList.remove('win-closing');
     winEl.classList.add('win-opening');
+    focusWindowElement(winEl);
     winEl.addEventListener('animationend', () => {
       winEl.classList.remove('win-opening');
     }, { once: true });
@@ -881,6 +984,7 @@ function openWindow(winEl, iconEl) {
     winEl.style.visibility = '';
     winEl.classList.remove('win-closing');
     winEl.classList.add('win-opening');
+    focusWindowElement(winEl);
     winEl.addEventListener('animationend', () => {
       winEl.classList.remove('win-opening');
       winEl.style.transformOrigin = '';
@@ -900,6 +1004,14 @@ function closeWindow(winEl, iconEl) {
     winEl.addEventListener('animationend', () => {
       winEl.classList.remove('win-closing');
       winEl.hidden = true;
+      updateWindowToggleState(winEl.id);
+      if (iconEl) {
+        try {
+          iconEl.focus({ preventScroll: true });
+        } catch {
+          iconEl.focus();
+        }
+      }
     }, { once: true });
     return;
   }
@@ -914,6 +1026,14 @@ function closeWindow(winEl, iconEl) {
     winEl.classList.remove('win-closing');
     winEl.style.transformOrigin = '';
     winEl.hidden = true;
+    updateWindowToggleState(winEl.id);
+    if (iconEl) {
+      try {
+        iconEl.focus({ preventScroll: true });
+      } catch {
+        iconEl.focus();
+      }
+    }
   }, { once: true });
 }
 
@@ -927,10 +1047,23 @@ function iconPop(iconEl) {
 }
 
 // ===== Help Tooltip =====
+function hideHelpTooltip() {
+  const tooltip = document.getElementById('help-tooltip');
+  const helpButton = document.getElementById('btn-help');
+  if (tooltip) tooltip.hidden = true;
+  if (helpButton) {
+    helpButton.removeAttribute('aria-describedby');
+    setExpandedState(helpButton, false);
+  }
+}
+
 function toggleHelpTooltip(btnEl, items, footerHtml) {
   const tooltip = document.getElementById('help-tooltip');
   const footer = document.getElementById('help-tooltip-footer');
-  if (!tooltip.hidden) { tooltip.hidden = true; return; }
+  if (!tooltip.hidden) {
+    hideHelpTooltip();
+    return;
+  }
 
   document.getElementById('help-tooltip-list').innerHTML = items.map(item => `<li>${item}</li>`).join('');
   tooltip.querySelector('.help-tooltip-title').textContent = t('helpTitle');
@@ -956,6 +1089,8 @@ function toggleHelpTooltip(btnEl, items, footerHtml) {
   tooltip.style.top  = top  + 'px';
   tooltip.style.left = left + 'px';
   tooltip.style.visibility = '';
+  btnEl.setAttribute('aria-describedby', 'help-tooltip');
+  setExpandedState(btnEl, true);
 }
 
 function buildHelpCreditsHtml() {
@@ -1005,9 +1140,43 @@ function updateGlobeAttribution() {
 document.addEventListener('click', (e) => {
   const tooltip = document.getElementById('help-tooltip');
   if (tooltip && !tooltip.hidden && !tooltip.contains(e.target) && !e.target.closest('#btn-help')) {
-    tooltip.hidden = true;
+    hideHelpTooltip();
   }
 });
+
+function buildViewpointSummary(vp) {
+  const parts = [
+    `${t('elev')}: ${Math.round(vp.elevation)}m`,
+    `${t('slope')}: ${vp.slope.toFixed(1)}°`,
+    `${t('peak')}: ${Math.round(vp.peakElevation)}m`,
+    `${t('valley')}: ${Math.round(vp.valleyDepth)}m`,
+  ];
+  if (vp.viewBearing != null) {
+    const bearingDeg = Math.round(vp.viewBearing || 0);
+    parts.unshift(`${t('viewDirectionLabel')} ${bearingToCompass(bearingDeg)} (${bearingDeg}°)`);
+  }
+  return parts.join('. ');
+}
+
+function buildToggleButtonContent(kind, active, withText) {
+  const icon = kind === 'like' ? (active ? '❤️' : '🤍') : (active ? '⭐' : '☆');
+  if (!withText) {
+    return `<span aria-hidden="true">${icon}</span>`;
+  }
+  const label = kind === 'like' ? t('love') : t('star');
+  return `<span aria-hidden="true">${icon}</span> <span>${label}</span>`;
+}
+
+function updateToggleButtonState(btn, kind, active) {
+  if (!btn) return;
+  const label = kind === 'like' ? t('loveThisSpot') : t('starThisSpot');
+  const withText = btn.dataset.withText === 'true';
+  btn.classList.toggle('active', active);
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.innerHTML = buildToggleButtonContent(kind, active, withText);
+}
 
 function renderSavedPanel(type) {
   const isLoved = type === 'loved';
@@ -1031,6 +1200,8 @@ function renderSavedPanel(type) {
     const scoreColor = getScoreColor(vp.score);
     const card = document.createElement('div');
     card.className = 'result-card';
+    card.tabIndex = 0;
+    card.setAttribute('aria-label', buildViewpointSummary(vp));
     card.innerHTML = `
       <div class="result-card-header">
         <span class="result-score" style="color:${scoreColor}">${Math.round(vp.score)}</span>
@@ -1043,8 +1214,14 @@ function renderSavedPanel(type) {
         <span class="result-stat">${t('valley')}: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
       </div>
     `;
-    card.addEventListener('click', () => {
+    const openSavedSpot = () => {
       state.map.setView([vp.lat, vp.lng], 14);
+    };
+    card.addEventListener('click', openSavedSpot);
+    card.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openSavedSpot();
     });
     listEl.appendChild(card);
   });
@@ -1059,9 +1236,11 @@ function syncMaximizeButton(winId, btn) {
   if (isWindowMaximized(winId)) {
     btn.innerHTML = RESTORE_SVG;
     btn.title = t('restore');
+    btn.setAttribute('aria-label', t('restore'));
   } else {
     btn.innerHTML = MAXIMIZE_SVG;
     btn.title = t('maximize');
+    btn.setAttribute('aria-label', t('maximize'));
   }
 }
 
@@ -1568,6 +1747,7 @@ function displayResults(viewpoints) {
     document.getElementById('results-list').innerHTML =
       `<p style="padding:16px;color:var(--text-muted);text-align:center;">${t('noResults')}</p>`;
     document.getElementById('results-panel').hidden = false;
+    announce(t('noResults'));
     return;
   }
 
@@ -1655,6 +1835,8 @@ function displayResults(viewpoints) {
     const card = document.createElement('div');
     card.className = 'result-card';
     card.dataset.vpid = vpId;
+    card.tabIndex = 0;
+    card.setAttribute('aria-label', buildViewpointSummary(vp));
     card.innerHTML = `
       <div class="result-card-header">
         <span class="result-score" style="color:${scoreColor}">${Math.round(vp.score)}</span>
@@ -1671,21 +1853,29 @@ function displayResults(viewpoints) {
         <span class="result-stat">${t('valley')}: <strong>${Math.round(vp.valleyDepth)}m</strong></span>
       </div>
       <div class="result-actions">
-        <button class="action-btn like-btn ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="${t('loveThisSpot')}">
-          ${state.likedSpots.has(vpId) ? '❤️' : '🤍'}
+        <button type="button" class="action-btn like-btn ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" data-with-text="false" title="${t('loveThisSpot')}" aria-label="${t('loveThisSpot')}" aria-pressed="${state.likedSpots.has(vpId) ? 'true' : 'false'}">
+          ${buildToggleButtonContent('like', state.likedSpots.has(vpId), false)}
         </button>
-        <button class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" title="${t('starThisSpot')}">
-          ${state.starredSpots.has(vpId) ? '⭐' : '☆'}
+        <button type="button" class="action-btn star-btn ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" data-with-text="false" title="${t('starThisSpot')}" aria-label="${t('starThisSpot')}" aria-pressed="${state.starredSpots.has(vpId) ? 'true' : 'false'}">
+          ${buildToggleButtonContent('star', state.starredSpots.has(vpId), false)}
         </button>
-        <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener" title="${t('getDirections')}">🗺️</a>
-        <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener" title="${t('scenic3dView')}">🌍</a>
+        <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener" aria-label="${t('getDirections')}" title="${t('getDirections')}">🗺️</a>
+        <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener" aria-label="${t('scenic3dView')}" title="${t('scenic3dView')}">🌍</a>
       </div>
     `;
+    const openResultCard = () => {
+      state.map.setView([vp.lat, vp.lng], 14);
+      setTimeout(() => marker.openPopup(), 400);
+    };
     // Navigate on card body click (not buttons)
     card.addEventListener('click', (e) => {
       if (e.target.closest('.action-btn')) return;
-      state.map.setView([vp.lat, vp.lng], 14);
-      setTimeout(() => marker.openPopup(), 400);
+      openResultCard();
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openResultCard();
     });
     // Heart
     card.querySelector('.like-btn').addEventListener('click', (e) => {
@@ -1704,6 +1894,7 @@ function displayResults(viewpoints) {
 
   document.getElementById('results-count').textContent = viewpoints.length;
   document.getElementById('results-panel').hidden = false;
+  announce(`${viewpoints.length} ${t('viewpoints')}`);
 
   // Fit map to results
   if (viewpoints.length > 0) {
@@ -1765,11 +1956,11 @@ function createPopupContent(vp, index, vpId) {
       <strong>${t('accessWarning')}:</strong> ${t('privatePropertyWarning')}
     </div>
     <div class="popup-actions">
-      <button class="action-btn like-btn popup-like ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
-        ${state.likedSpots.has(vpId) ? '❤️' : '🤍'} ${t('love')}
+      <button type="button" class="action-btn like-btn popup-like ${state.likedSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" data-with-text="true" aria-label="${t('loveThisSpot')}" aria-pressed="${state.likedSpots.has(vpId) ? 'true' : 'false'}" title="${t('loveThisSpot')}">
+        ${buildToggleButtonContent('like', state.likedSpots.has(vpId), true)}
       </button>
-      <button class="action-btn star-btn popup-star ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}">
-        ${state.starredSpots.has(vpId) ? '⭐' : '☆'} ${t('star')}
+      <button type="button" class="action-btn star-btn popup-star ${state.starredSpots.has(vpId) ? 'active' : ''}" data-vpid="${vpId}" data-with-text="true" aria-label="${t('starThisSpot')}" aria-pressed="${state.starredSpots.has(vpId) ? 'true' : 'false'}" title="${t('starThisSpot')}">
+        ${buildToggleButtonContent('star', state.starredSpots.has(vpId), true)}
       </button>
       <a class="action-btn map-btn" href="${mapsUrl}" target="_blank" rel="noopener">🗺️ ${t('maps')}</a>
       <a class="action-btn ge-btn" href="${geUrl}" target="_blank" rel="noopener">🌍 ${t('scene3d')}</a>
@@ -1780,19 +1971,23 @@ function createPopupContent(vp, index, vpId) {
 function wirePopupActions(vpId) {
   const likeBtn = document.querySelector('.popup-like[data-vpid="' + vpId + '"]');
   const starBtn = document.querySelector('.popup-star[data-vpid="' + vpId + '"]');
-  if (likeBtn) likeBtn.addEventListener('click', () => toggleLike(vpId, likeBtn));
-  if (starBtn) starBtn.addEventListener('click', () => toggleStar(vpId, starBtn));
+  if (likeBtn) likeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleLike(vpId, likeBtn);
+  });
+  if (starBtn) starBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleStar(vpId, starBtn);
+  });
 }
 
 function toggleLike(vpId, btn) {
   if (state.likedSpots.has(vpId)) {
     state.likedSpots.delete(vpId);
-    btn.textContent = '🤍';
-    btn.classList.remove('active');
   } else {
     state.likedSpots.add(vpId);
-    btn.textContent = '❤️';
-    btn.classList.add('active');
   }
   saveLiked();
   // sync card button if popup button was toggled
@@ -1803,12 +1998,8 @@ function toggleLike(vpId, btn) {
 function toggleStar(vpId, btn) {
   if (state.starredSpots.has(vpId)) {
     state.starredSpots.delete(vpId);
-    btn.textContent = '☆';
-    btn.classList.remove('active');
   } else {
     state.starredSpots.add(vpId);
-    btn.textContent = '⭐';
-    btn.classList.add('active');
   }
   saveStarred();
   syncActionBtn('star-btn', vpId);
@@ -1820,9 +2011,7 @@ function syncActionBtn(cls, vpId) {
   document.querySelectorAll(`.${cls}[data-vpid="${vpId}"]`).forEach(b => {
     const isLike = cls === 'like-btn';
     const active = isLike ? state.likedSpots.has(vpId) : state.starredSpots.has(vpId);
-    b.classList.toggle('active', active);
-    if (isLike) b.textContent = active ? '❤️' : '🤍';
-    else b.textContent = active ? '⭐' : '☆';
+    updateToggleButtonState(b, isLike ? 'like' : 'star', active);
   });
 }
 
@@ -1881,23 +2070,37 @@ function createClusterIcon(cluster) {
 // ===== Progress UI =====
 function showProgress(text) {
   document.getElementById('progress-overlay').hidden = false;
+  document.getElementById('window-content').setAttribute('aria-busy', 'true');
+  document.getElementById('map').setAttribute('aria-busy', 'true');
   document.getElementById('progress-text').textContent = text;
-  document.getElementById('progress-bar').style.width = '0%';
   document.getElementById('progress-detail').textContent = '';
+  setProgressBarState(0, text, '');
 }
 
 function updateProgress(text, percent, detail) {
   document.getElementById('progress-text').textContent = text;
-  if (percent != null) {
-    document.getElementById('progress-bar').style.width = percent + '%';
-  }
   if (detail != null) {
     document.getElementById('progress-detail').textContent = detail;
   }
+  setProgressBarState(percent, text, detail);
 }
 
 function hideProgress() {
+  document.getElementById('window-content').setAttribute('aria-busy', 'false');
+  document.getElementById('map').setAttribute('aria-busy', 'false');
   document.getElementById('progress-overlay').hidden = true;
+}
+
+function setProgressBarState(percent, text, detail) {
+  const progressBar = document.getElementById('progress-bar');
+  if (!progressBar) return;
+  const current = parseInt(progressBar.getAttribute('aria-valuenow') || '0', 10);
+  const safePercent = percent == null ? current : Math.max(0, Math.min(100, Math.round(percent)));
+  progressBar.style.width = safePercent + '%';
+  progressBar.setAttribute('aria-valuenow', String(safePercent));
+  const valueText = [text, detail].filter(Boolean).join('. ');
+  if (valueText) progressBar.setAttribute('aria-valuetext', valueText);
+  else progressBar.removeAttribute('aria-valuetext');
 }
 
 function handleLanguageChange() {
@@ -1906,6 +2109,8 @@ function handleLanguageChange() {
   updateSearchTerrainCreditHtml();
   updateGlobeAttribution();
   syncAllMaximizeButtons();
+  syncWindowToggleStates();
+  syncMapControlAccessibility();
   validateSelection(state.selectionBounds);
 
   if (!document.getElementById('loved-window').hidden) {

@@ -10,6 +10,9 @@
 (function () {
   'use strict';
 
+  // Bump LOCALE_VERSION whenever locales/*.json changes so cached responses
+  // (CDN, service worker, browser disk cache) don't serve stale strings.
+  var LOCALE_VERSION = '2026-05-04';
   var DEFAULT_LANG = 'en';
   var SUPPORTED_LANGS = { en: true, tr: true };
   var LOCALE_FILES = {
@@ -35,7 +38,7 @@
     if (strings[lang]) return Promise.resolve(strings[lang]);
     if (loadPromises[lang]) return loadPromises[lang];
 
-    loadPromises[lang] = fetch(LOCALE_FILES[lang])
+    loadPromises[lang] = fetch(LOCALE_FILES[lang] + '?v=' + encodeURIComponent(LOCALE_VERSION))
       .then(function (response) {
         if (!response.ok) {
           throw new Error('Failed to load locale "' + lang + '"');

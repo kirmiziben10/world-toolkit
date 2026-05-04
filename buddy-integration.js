@@ -226,6 +226,22 @@
       buddy = null;
     }
 
+    function syncBuddyIconState(iconEl) {
+      if (!iconEl) return;
+      iconEl.setAttribute('aria-pressed', visible ? 'true' : 'false');
+    }
+
+    function toggleBuddyVisibility(iconEl) {
+      visible = !visible;
+      localStorage.setItem('sv_buddy_visible', visible ? 'true' : 'false');
+      if (visible) {
+        if (!buddy) initBuddy();
+      } else {
+        destroyBuddy();
+      }
+      syncBuddyIconState(iconEl);
+    }
+
     // --- Cooldown-aware speech ---
     function reactWithCooldown(text, triggerName) {
       if (!buddy) return;
@@ -390,14 +406,14 @@
     // --- Desktop icon toggle ---
     var iconEl = document.getElementById('icon-rocky');
     if (iconEl) {
+      syncBuddyIconState(iconEl);
       iconEl.addEventListener('dblclick', function () {
-        visible = !visible;
-        localStorage.setItem('sv_buddy_visible', visible ? 'true' : 'false');
-        if (visible) {
-          if (!buddy) initBuddy();
-        } else {
-          destroyBuddy();
-        }
+        toggleBuddyVisibility(iconEl);
+      });
+      iconEl.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggleBuddyVisibility(iconEl);
       });
     }
 

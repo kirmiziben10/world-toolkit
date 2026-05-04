@@ -152,7 +152,28 @@
   function showLabel(text) {
     if (!labelEl) return;
     labelEl.textContent = text;
+    labelEl.title = text;
+    labelEl.setAttribute('aria-label', text);
     labelEl.hidden = false;
+    syncGlobeAriaLabel();
+  }
+
+  function getDefaultGlobeLabel() {
+    if (window.i18n && typeof window.i18n.t === 'function') {
+      const translated = window.i18n.t('interactive3dGlobe');
+      if (translated && translated !== 'interactive3dGlobe') return translated;
+    }
+    return 'Interactive 3D globe';
+  }
+
+  function syncGlobeAriaLabel() {
+    const globe = document.getElementById('earth-globe');
+    if (!globe) return;
+    if (labelEl && !labelEl.hidden && labelEl.textContent) {
+      globe.setAttribute('aria-label', labelEl.textContent);
+      return;
+    }
+    globe.setAttribute('aria-label', getDefaultGlobeLabel());
   }
 
   function scheduleGeocode() {
@@ -375,12 +396,19 @@
     const img = document.getElementById('earth-img');
     if (img) img.remove();
 
-    labelEl = document.createElement('div');
+    labelEl = document.createElement('button');
     labelEl.id = 'globe-label';
+    labelEl.type = 'button';
+    labelEl.setAttribute('aria-controls', 'map');
     labelEl.hidden = true;
     labelEl.addEventListener('click', navigateMap);
     const globe = document.getElementById('earth-globe');
+    globe.setAttribute('role', 'img');
+    globe.setAttribute('aria-describedby', 'globe-attribution');
+    syncGlobeAriaLabel();
     globe.parentElement.insertBefore(labelEl, globe.nextSibling);
+
+    document.addEventListener('i18n:changed', syncGlobeAriaLabel);
 
     new p5(sketch);
   }
